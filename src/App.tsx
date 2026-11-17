@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import {
   ArrowRight,
   BookOpen,
+  Building2,
   Calendar,
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Clock,
   FileText,
@@ -41,6 +44,7 @@ import {
   DEPARTMENTS_EN,
   GALLERY_CATEGORY_EN,
   GALLERY_ITEMS_EN,
+  HERO_SLIDES,
   NOTICE_CATEGORY_EN,
   NOTICES_EN,
   RESIDENTIAL_OPTIONS,
@@ -105,7 +109,9 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [noticeFilter, setNoticeFilter] = useState<NoticeFilter>('সকল');
   const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null);
-  const [heroImgFailed, setHeroImgFailed] = useState(false);
+  const [activeHeroSlide, setActiveHeroSlide] = useState(0);
+  const [heroPaused, setHeroPaused] = useState(false);
+  const [failedHeroSlides, setFailedHeroSlides] = useState<Record<string, boolean>>({});
   const [libraryImgFailed, setLibraryImgFailed] = useState(false);
   const [muhtamimImgFailed, setMuhtamimImgFailed] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -235,6 +241,27 @@ export default function App() {
       document.body.style.overflow = prevOverflow;
     };
   }, [isAnyModalOpen]);
+
+  useEffect(() => {
+    if (heroPaused || isAnyModalOpen || showDashboard) return;
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) return;
+
+    const timer = window.setInterval(() => {
+      setActiveHeroSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+    }, 5500);
+    return () => window.clearInterval(timer);
+  }, [heroPaused, isAnyModalOpen, showDashboard]);
+
+  const currentHeroSlide = HERO_SLIDES[activeHeroSlide] ?? HERO_SLIDES[0];
+  const goToPrevHeroSlide = () => {
+    setActiveHeroSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+  };
+  const goToNextHeroSlide = () => {
+    setActiveHeroSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+  };
 
   const { weekday, gregorian, hijri } = useMemo(
     () => getLocalizedFormattedDates(lang),
@@ -582,37 +609,98 @@ export default function App() {
       </header>
 
       <main>
-        {/* 3. Hero Section */}
-        <section id="home" className="bg-white py-16 sm:py-20 lg:py-24">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 items-stretch gap-12 lg:grid-cols-12 lg:gap-14">
-              {/* Hero Copy */}
-              <div className="flex flex-col justify-center lg:col-span-7">
-                <p className="inline-flex w-fit items-center gap-2 text-sm font-medium text-[#B45309]">
-                  <span className="h-px w-6 bg-[#B45309]" aria-hidden="true" />
-                  <span>{copy.heroBadge}</span>
+        {/* 3. Panoramic Hero Showcase with Multi-Photo Campus Carousel */}
+        <section
+          id="home"
+          className="relative overflow-hidden bg-white"
+          onMouseEnter={() => setHeroPaused(true)}
+          onMouseLeave={() => setHeroPaused(false)}
+        >
+          {/* Desktop Right-Bleed Multi-Photo Stage with Soft Curved White Fade */}
+          <div className="relative lg:min-h-[560px] xl:min-h-[600px]">
+            {/* Background Image Layer (Desktop lg+) */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[68%] overflow-hidden bg-slate-100 lg:block xl:w-[66%]"
+            >
+              {HERO_SLIDES.map((slide, idx) => {
+                const isActive = idx === activeHeroSlide;
+                const slideFailed = failedHeroSlides[slide.id];
+                return (
+                  <div
+                    key={slide.id}
+                    className={`absolute inset-0 transition-opacity duration-700 motion-reduce:transition-none ${
+                      isActive ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  >
+                    {!slideFailed ? (
+                      <img
+                        src={slide.imageUrl}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        onError={() =>
+                          setFailedHeroSlides((prev) => ({ ...prev, [slide.id]: true }))
+                        }
+                        className="h-full w-full object-cover object-center"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#ECFDF5] to-slate-100" />
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Soft White Left Fade & Subtle Curved Sweep Matching Reference Architecture */}
+              <div className="absolute inset-0 bg-gradient-to-r from-white via-white/80 via-[26%] to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white via-white/60 to-transparent" />
+              <svg
+                viewBox="0 0 400 600"
+                preserveAspectRatio="none"
+                className="absolute inset-y-0 left-0 h-full w-56 text-white"
+              >
+                <path
+                  d="M0,0 L210,0 C120,175 110,415 245,600 L0,600 Z"
+                  fill="currentColor"
+                  fillOpacity="0.92"
+                />
+                <path
+                  d="M210,0 C120,175 110,415 245,600 L295,600 C165,415 175,175 265,0 Z"
+                  fill="currentColor"
+                  fillOpacity="0.32"
+                />
+              </svg>
+            </div>
+
+            {/* Foreground Content + Multi-Photo Controls Container */}
+            <div className="relative z-10 mx-auto max-w-7xl px-4 pb-8 pt-10 sm:px-6 sm:pt-14 lg:flex lg:min-h-[560px] lg:items-end lg:justify-between lg:gap-10 lg:px-8 lg:pb-16 lg:pt-16 xl:min-h-[600px]">
+              {/* Left Copy Column */}
+              <div className="flex flex-col justify-center lg:max-w-[52%] lg:self-center xl:max-w-[49%]">
+                <p className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#ECFDF5] px-3 py-1.5 text-xs font-semibold text-[#065F46] sm:text-sm">
+                  <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{copy.heroWelcome}</span>
                 </p>
 
                 <h1
-                  className="mt-5 font-serif text-3xl font-bold leading-[1.25] tracking-tight text-[#0F172A] sm:text-4xl lg:text-[2.85rem]"
+                  className="mt-5 font-serif text-3xl font-bold leading-[1.18] tracking-tight sm:text-4xl lg:text-[2.95rem] xl:text-[3.25rem]"
                   style={{ textWrap: 'balance' }}
                 >
-                  {copy.brandFull}
+                  <span className="block text-[#065F46]">{copy.heroHeadlineLine1}</span>
+                  <span className="mt-1 block text-[#0F172A]">{copy.heroHeadlineLine2}</span>
                 </h1>
 
-                <p className="mt-3 font-serif text-lg font-medium text-[#065F46] sm:text-xl">
+                <p className="mt-4 font-serif text-base font-medium text-[#065F46] sm:text-lg">
                   {copy.heroSubtitle}
                 </p>
 
-                <p className="mt-5 max-w-2xl text-base leading-relaxed text-[#475569] sm:text-[1.0625rem]">
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#475569] sm:text-base">
                   {copy.heroDescription}
                 </p>
 
-                <div className="mt-8 flex flex-wrap items-center gap-4">
+                <div className="mt-7 flex flex-wrap items-center gap-3.5">
                   <button
                     type="button"
                     onClick={() => openAdmissionPopup()}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-6 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-6 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                   >
                     <span>{copy.heroApplyBtn}</span>
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -620,13 +708,18 @@ export default function App() {
 
                   <a
                     href="#about"
-                    className="inline-flex items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-6 py-3 text-sm font-medium text-[#0F172A] transition-colors duration-150 hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#065F46]/35 bg-white/95 px-6 py-3 text-sm font-semibold text-[#065F46] transition-colors duration-150 hover:bg-[#ECFDF5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                   >
-                    {copy.heroAboutBtn}
+                    <BookOpen className="h-4 w-4" aria-hidden="true" />
+                    <span>{copy.heroAboutBtn}</span>
                   </a>
                 </div>
 
-                <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569]">
+                <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[#E2E8F0] pt-5 text-xs text-[#475569]">
+                  <span className="font-medium text-[#B45309]">{copy.heroBadge}</span>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
                   <span>{copy.heroTrust[0]}</span>
                   <span aria-hidden="true" className="text-slate-300">
                     ·
@@ -639,53 +732,136 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Hero Architectural Showcase Card */}
-              <div className="lg:col-span-5">
-                <div className="flex h-full flex-col overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
-                  <div className="relative aspect-[4/3] w-full flex-1 overflow-hidden bg-slate-100 lg:aspect-auto">
-                    {!heroImgFailed ? (
-                      <img
-                        src="/src/assets/images/hero_madrasa_campus_1794935618315.jpg"
-                        alt={copy.brandFull}
-                        referrerPolicy="no-referrer"
-                        onError={() => setHeroImgFailed(true)}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full min-h-[260px] flex-col items-center justify-center bg-gradient-to-br from-[#F8FAFC] to-slate-100 p-8 text-center">
-                        <BookOpen className="h-10 w-10 text-[#065F46]" aria-hidden="true" />
-                        <p className="mt-3 font-serif text-base font-semibold text-[#0F172A]">
-                          {copy.brandFull}
-                        </p>
-                        <p className="mt-1 text-xs text-[#475569]">
-                          {copy.heroCampusFallbackSubtitle}
-                        </p>
+              {/* Mobile & Tablet Clean Photo Carousel (< lg) */}
+              <div className="mt-8 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] lg:hidden">
+                <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-100">
+                  {HERO_SLIDES.map((slide, idx) => {
+                    const isActive = idx === activeHeroSlide;
+                    const slideFailed = failedHeroSlides[slide.id];
+                    return (
+                      <div
+                        key={slide.id}
+                        className={`absolute inset-0 transition-opacity duration-500 motion-reduce:transition-none ${
+                          isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                      >
+                        {!slideFailed ? (
+                          <img
+                            src={slide.imageUrl}
+                            alt={lang === 'en' ? slide.altEn : slide.altBn}
+                            referrerPolicy="no-referrer"
+                            onError={() =>
+                              setFailedHeroSlides((prev) => ({ ...prev, [slide.id]: true }))
+                            }
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-[#F8FAFC] to-slate-100 p-6 text-center">
+                            <BookOpen className="h-9 w-9 text-[#065F46]" aria-hidden="true" />
+                            <p className="mt-2 font-serif text-sm font-semibold text-[#0F172A]">
+                              {copy.brandFull}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
 
-                  <div className="flex items-center justify-between gap-4 border-t border-[#E2E8F0] bg-white px-5 py-4">
-                    <div>
-                      <p className="text-xs font-medium text-[#B45309]">{copy.heroCampusTag}</p>
-                      <p className="mt-0.5 text-sm font-semibold text-[#0F172A]">
-                        {copy.heroCampusTitle}
-                      </p>
-                    </div>
-                    <a
-                      href="#departments"
-                      className="text-xs font-medium text-[#065F46] underline-offset-4 hover:underline whitespace-nowrap shrink-0"
-                    >
-                      {copy.heroCampusLink}
-                    </a>
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent p-4 text-white">
+                    <p className="text-xs font-medium text-emerald-200 tabular-nums">
+                      {formatDigits(activeHeroSlide + 1, lang)} /{' '}
+                      {formatDigits(HERO_SLIDES.length, lang)}
+                    </p>
+                    <p className="mt-0.5 font-serif text-sm font-semibold">
+                      {lang === 'en' ? currentHeroSlide.titleEn : currentHeroSlide.titleBn}
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* 4. Minimalist 4-Column Stat Bar */}
-            <div className="mt-14 grid grid-cols-2 divide-y divide-[#E2E8F0] rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+              {/* Multi-Photo Thumbnail Strip & Navigation Controls (Desktop Bottom-Right & Mobile Bottom) */}
+              <div className="mt-3 rounded-xl border border-[#E2E8F0] bg-white/95 p-3 shadow-sm backdrop-blur-md lg:mt-0 lg:w-[370px] lg:shrink-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-[#B45309] tabular-nums">
+                      {copy.heroCampusTag} · {formatDigits(activeHeroSlide + 1, lang)}/
+                      {formatDigits(HERO_SLIDES.length, lang)}
+                    </p>
+                    <p className="truncate text-xs font-semibold text-[#0F172A] sm:text-sm">
+                      {lang === 'en' ? currentHeroSlide.titleEn : currentHeroSlide.titleBn}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={goToPrevHeroSlide}
+                      aria-label={copy.heroPrevSlideAria}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white text-[#0F172A] transition-colors hover:border-[#065F46] hover:text-[#065F46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
+                    >
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={goToNextHeroSlide}
+                      aria-label={copy.heroNextSlideAria}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white text-[#0F172A] transition-colors hover:border-[#065F46] hover:text-[#065F46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
+                    >
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Clickable Multi-Photo Thumbnails */}
+                <div className="mt-2.5 grid grid-cols-5 gap-2">
+                  {HERO_SLIDES.map((slide, idx) => {
+                    const isSelected = idx === activeHeroSlide;
+                    const slideTitle = lang === 'en' ? slide.titleEn : slide.titleBn;
+                    const thumbFailed = failedHeroSlides[slide.id];
+                    return (
+                      <button
+                        key={slide.id}
+                        type="button"
+                        onClick={() => setActiveHeroSlide(idx)}
+                        aria-label={copy.heroSelectSlideAria(
+                          formatDigits(idx + 1, lang),
+                          slideTitle,
+                        )}
+                        aria-pressed={isSelected}
+                        className={`group relative aspect-[16/10] overflow-hidden rounded-md border transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] ${
+                          isSelected
+                            ? 'border-[#065F46] ring-2 ring-[#065F46]/30'
+                            : 'border-[#E2E8F0] opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        {!thumbFailed ? (
+                          <img
+                            src={slide.imageUrl}
+                            alt={slideTitle}
+                            referrerPolicy="no-referrer"
+                            onError={() =>
+                              setFailedHeroSlides((prev) => ({ ...prev, [slide.id]: true }))
+                            }
+                            className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center bg-slate-100 text-[10px] font-semibold text-[#065F46]">
+                            {formatDigits(idx + 1, lang)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Minimalist 4-Column Stat Bar Anchored Beneath the Hero */}
+          <div className="relative z-20 mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:-mt-7 lg:px-8 lg:pb-16">
+            <div className="grid grid-cols-2 divide-y divide-[#E2E8F0] rounded-xl border border-[#E2E8F0] bg-white shadow-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0">
               {activeStats.map((stat) => (
-                <div key={stat.label} className="px-6 py-6 text-center sm:text-left">
+                <div key={stat.label} className="px-6 py-5 text-center sm:text-left">
                   <p className="font-serif text-2xl font-bold text-[#065F46] tabular-nums sm:text-3xl">
                     {stat.value}
                   </p>

@@ -506,6 +506,70 @@ export const ADMISSION_STEPS_EN = [
   },
 ];
 
+export interface HeroSlide {
+  id: string;
+  imageUrl: string;
+  titleBn: string;
+  titleEn: string;
+  subtitleBn: string;
+  subtitleEn: string;
+  altBn: string;
+  altEn: string;
+}
+
+export const HERO_SLIDES: HeroSlide[] = [
+  {
+    id: 'slide-main-building',
+    imageUrl: '/src/assets/images/hero_white_madrasa_exterior_1794946111771.jpg',
+    titleBn: 'মূল একাডেমিক ভবন ও কেন্দ্রীয় গম্বুজ',
+    titleEn: 'Main Academic Building & Central Dome',
+    subtitleBn: 'দোতলা খিলানযুক্ত ভবন, মিনার ও সবুজ প্রাঙ্গণ',
+    subtitleEn: 'Two-story arched facade, minaret & green lawn',
+    altBn: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসার শ্বেতশুভ্র দোতলা মূল ভবন, গম্বুজ, মিনার ও সবুজ প্রাঙ্গণ',
+    altEn: 'Grand white two-story madrasa academic building with central dome, minaret, and green courtyard',
+  },
+  {
+    id: 'slide-campus-walkway',
+    imageUrl: '/src/assets/images/hero_madrasa_campus_walkway_1794946112097.jpg',
+    titleBn: 'সবুজ ক্যাম্পাস প্রাঙ্গণ ও খিলান বারান্দা',
+    titleEn: 'Green Campus Courtyard & Arched Walkways',
+    subtitleBn: 'শিক্ষার্থীদের শান্ত ও সুশৃঙ্খল পদচারণা',
+    subtitleEn: 'Serene academic colonnade & landscaped courtyard',
+    altBn: 'মাদ্রাসার খিলানযুক্ত বারান্দা ও বাগানঘেরা প্রাঙ্গণে শিক্ষার্থীদের চলাচল',
+    altEn: 'Students walking through the arched madrasa courtyard garden in morning sunlight',
+  },
+  {
+    id: 'slide-study-courtyard',
+    imageUrl: '/src/assets/images/hero_madrasa_campus_1794935618315.jpg',
+    titleBn: 'নিরিবিলি পাঠচর্চা ও উন্মুক্ত চত্বর',
+    titleEn: 'Quiet Study Courtyard & Fountain Garden',
+    subtitleBn: 'আধ্যাত্মিক ও মনোরম শিক্ষার পরিবেশ',
+    subtitleEn: 'Peaceful open-air reading & reflection space',
+    altBn: 'মাদ্রাসার অভ্যন্তরীণ চত্বর ও অধ্যয়ন পরিবেশ',
+    altEn: 'Peaceful arched madrasa inner courtyard with trees and students studying',
+  },
+  {
+    id: 'slide-jame-masjid',
+    imageUrl: '/src/assets/images/gallery_mosque_prayer_1794936095471.jpg',
+    titleBn: 'কেন্দ্রীয় জামে মসজিদ ও নামাজ হল',
+    titleEn: 'Central Jame Masjid & Prayer Hall',
+    subtitleBn: 'পাঁচ ওয়াক্ত জামাত ও ইবাদতের সুপরিসর ব্যবস্থা',
+    subtitleEn: 'Spacious sanctuary for daily congregational prayer',
+    altBn: 'মাদ্রাসার প্রশস্ত কেন্দ্রীয় জামে মসজিদ হল',
+    altEn: 'Bright and spacious central madrasa mosque interior',
+  },
+  {
+    id: 'slide-darul-mutalaa',
+    imageUrl: '/src/assets/images/madrasa_library_heritage_1794935619165.jpg',
+    titleBn: 'দারুল মুতালাআ ও কেন্দ্রীয় কুতুবখানা',
+    titleEn: 'Darul Mutalaa & Central Library',
+    subtitleBn: '৪,৫০০+ ইসলামী ও আধুনিক রেফারেন্স গ্রন্থ',
+    subtitleEn: '4,500+ classical Islamic & modern reference volumes',
+    altBn: 'মাদ্রাসার সমৃদ্ধ কেন্দ্রীয় কুতুবখানা ও পাঠাগার',
+    altEn: 'Central madrasa library stocked with classical Islamic and academic books',
+  },
+];
+
 export const UI_COPY = {
   bn: {
     pageTitle: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা | দ্বীনি ও আধুনিক শিক্ষার সমন্বিত বিদ্যাপীঠ',
@@ -528,12 +592,19 @@ export const UI_COPY = {
     ctaStudentDashboard: 'ছাত্র ড্যাশবোর্ড',
     menuOpenAria: 'মেনু খুলুন',
     menuCloseAria: 'মেনু বন্ধ করুন',
+    heroWelcome: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসায় স্বাগতম',
     heroBadge: 'ভর্তি চলছে · শিক্ষাবর্ষ ১৪৪৭–৪৮ হিজরি',
-    heroSubtitle: 'ইলমে ওহী, আমল ও আধুনিক শিক্ষার সমন্বিত আদর্শ বিদ্যাপীঠ',
+    heroHeadlineLine1: 'ইলমে ওহীর আলোয়',
+    heroHeadlineLine2: 'গড়ুন উজ্জ্বল ভবিষ্যৎ',
+    heroSubtitle: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা — দ্বীনি ও আধুনিক শিক্ষার সমন্বিত বিদ্যাপীঠ',
     heroDescription:
       'বিশুদ্ধ আকীদা ও সুন্নতে নববীর আলোকে আগামী প্রজন্মের নৈতিক ও মেধার বিকাশ ঘটানোই আমাদের মূল ব্রত। নূরানী, হিফজুল কুরআন এবং কিতাব বিভাগের পাশাপাশি যুগোপযোগী সাধারণ ও কারিগরি শিক্ষায় সুসজ্জিত একটি নিরাপদ শিক্ষাঙ্গন।',
     heroApplyBtn: 'ভর্তি আবেদন করুন',
-    heroAboutBtn: 'মাদ্রাসা সম্পর্কে জানুন',
+    heroAboutBtn: 'আমাদের মাদ্রাসা সম্পর্কে',
+    heroPrevSlideAria: 'পূর্ববর্তী ক্যাম্পাস ছবি',
+    heroNextSlideAria: 'পরবর্তী ক্যাম্পাস ছবি',
+    heroSelectSlideAria: (index: string, title: string) => `${index} নং ছবি দেখুন: ${title}`,
+    heroGalleryLink: 'সব ছবি দেখুন',
     heroTrust: [
       'বেফাকুল মাদারিসিল আরাবিয়া নিবন্ধিত',
       'স্থাপিত: ১৯৯৯ খ্রিস্টাব্দ',
@@ -791,12 +862,19 @@ export const UI_COPY = {
     ctaStudentDashboard: 'Student Dashboard',
     menuOpenAria: 'Open navigation menu',
     menuCloseAria: 'Close navigation menu',
+    heroWelcome: 'Welcome to Al-Jamiatul Islamia Adarsha Madrasa',
     heroBadge: 'Admissions Open · Session 1447–48 AH',
+    heroHeadlineLine1: 'Learn Islam,',
+    heroHeadlineLine2: 'Build a Better Future',
     heroSubtitle: 'An Ideal Seat of Revelation, Character & Modern Learning',
     heroDescription:
       'Rooted in authentic Creed and Prophetic Sunnah, our mission is to nurture both moral integrity and intellectual excellence. A safe, disciplined campus combining Nurani, Hifzul Quran, and Kitab studies with modern general and technical education.',
     heroApplyBtn: 'Apply for Admission',
-    heroAboutBtn: 'Explore Madrasa',
+    heroAboutBtn: 'About Our Madrasa',
+    heroPrevSlideAria: 'Previous campus photo',
+    heroNextSlideAria: 'Next campus photo',
+    heroSelectSlideAria: (index: string, title: string) => `View campus photo ${index}: ${title}`,
+    heroGalleryLink: 'View Gallery',
     heroTrust: [
       'Registered with Befaqul Madarisil Arabia',
       'Established: 1999 CE',
