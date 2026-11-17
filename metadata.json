@@ -1,0 +1,8 @@
+{
+  "name": "আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা",
+  "description": "ইলমে ওহী ও আধুনিক শিক্ষার সমন্বিত আদর্শ দ্বীনি শিক্ষাপ্রতিষ্ঠান — পরিচিতি, বিভাগসমূহ, নোটিশ বোর্ড এবং অনলাইন ভর্তি আবেদন।",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
