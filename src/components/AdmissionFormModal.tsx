@@ -2,18 +2,24 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 import {
   DEPARTMENTS,
-  RESIDENTIAL_TYPES,
   generateTrackingId,
   isValidBdMobile,
   normalizeMobileNumber,
   toBengaliDigits,
   type AdmissionSubmission,
-  type ResidentialType,
 } from '../data/madrasaData';
+import {
+  DEPARTMENTS_EN,
+  RESIDENTIAL_OPTIONS,
+  UI_COPY,
+  type Language,
+  type ResidentialKey,
+} from '../data/madrasaTranslations';
 
 interface AdmissionFormModalProps {
   isOpen: boolean;
-  initialDepartment?: string;
+  initialDepartmentId?: string;
+  lang: Language;
   onClose: () => void;
   onSubmitted: (submission: AdmissionSubmission) => void;
 }
@@ -29,35 +35,34 @@ interface ModalFormErrors {
 
 export function AdmissionFormModal({
   isOpen,
-  initialDepartment,
+  initialDepartmentId,
+  lang,
   onClose,
   onSubmitted,
 }: AdmissionFormModalProps) {
-  const defaultDept = initialDepartment || DEPARTMENTS[0].name;
+  const copy = UI_COPY[lang];
+  const activeDepartments = lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS;
+
   const [studentName, setStudentName] = useState('');
   const [fatherName, setFatherName] = useState('');
-  const [department, setDepartment] = useState(defaultDept);
-  const [className, setClassName] = useState(DEPARTMENTS[0].classes[0]);
-  const [residentialType, setResidentialType] = useState<ResidentialType>('আবাসিক (বোর্ডিং)');
+  const [departmentId, setDepartmentId] = useState(initialDepartmentId || DEPARTMENTS[0].id);
+  const [classIndex, setClassIndex] = useState(0);
+  const [residentialKey, setResidentialKey] = useState<ResidentialKey>('boarding');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<ModalFormErrors>({});
 
-  const availableClasses = useMemo(() => {
-    const matched = DEPARTMENTS.find((d) => d.name === department);
-    return matched ? matched.classes : DEPARTMENTS[0].classes;
-  }, [department]);
+  const selectedDept = useMemo(
+    () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
+    [activeDepartments, departmentId],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
     setErrors({});
-    const targetDept = initialDepartment || DEPARTMENTS[0].name;
-    setDepartment(targetDept);
-    const matched = DEPARTMENTS.find((d) => d.name === targetDept);
-    if (matched && matched.classes.length > 0) {
-      setClassName(matched.classes[0]);
-    }
-  }, [initialDepartment, isOpen]);
+    setDepartmentId(initialDepartmentId || DEPARTMENTS[0].id);
+    setClassIndex(0);
+  }, [initialDepartmentId, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,12 +77,9 @@ export function AdmissionFormModal({
 
   if (!isOpen) return null;
 
-  const handleDepartmentChange = (nextDept: string) => {
-    setDepartment(nextDept);
-    const matched = DEPARTMENTS.find((d) => d.name === nextDept);
-    if (matched && matched.classes.length > 0) {
-      setClassName(matched.classes[0]);
-    }
+  const handleDepartmentChange = (nextDeptId: string) => {
+    setDepartmentId(nextDeptId);
+    setClassIndex(0);
     if (errors.department) {
       setErrors((prev) => ({ ...prev, department: undefined }));
     }
@@ -88,23 +90,23 @@ export function AdmissionFormModal({
     const nextErrors: ModalFormErrors = {};
 
     if (!studentName.trim() || studentName.trim().length < 2) {
-      nextErrors.studentName = 'অনুগ্রহ করে শিক্ষার্থীর পূর্ণ নাম লিখুন।';
+      nextErrors.studentName = copy.validation.studentName;
     }
     if (!fatherName.trim() || fatherName.trim().length < 2) {
-      nextErrors.fatherName = 'অনুগ্রহ করে পিতার পূর্ণ নাম লিখুন।';
+      nextErrors.fatherName = copy.validation.fatherName;
     }
-    if (!department) {
-      nextErrors.department = 'বিভাগ নির্বাচন করুন।';
+    if (!departmentId) {
+      nextErrors.department = copy.validation.dept;
     }
-    if (!className) {
-      nextErrors.className = 'ক্লাস / জামাত নির্বাচন করুন।';
+    if (!selectedDept.classes[classIndex]) {
+      nextErrors.className = copy.validation.className;
     }
     const cleanMobile = normalizeMobileNumber(mobile);
     if (!isValidBdMobile(cleanMobile)) {
-      nextErrors.mobile = 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।';
+      nextErrors.mobile = copy.validation.mobile;
     }
     if (!address.trim() || address.trim().length < 4) {
-      nextErrors.address = 'অনুগ্রহ করে বর্তমান ঠিকানা লিখুন।';
+      nextErrors.address = copy.validation.address;
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -114,7 +116,7 @@ export function AdmissionFormModal({
 
     let timeFormatted = '';
     try {
-      timeFormatted = new Intl.DateTimeFormat('bn-BD', {
+      timeFormatted = new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'bn-BD', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -122,17 +124,27 @@ export function AdmissionFormModal({
         minute: '2-digit',
       }).format(new Date());
     } catch {
-      timeFormatted = toBengaliDigits(new Date().toLocaleString('en-GB'));
+      timeFormatted =
+        lang === 'en'
+          ? new Date().toLocaleString('en-US')
+          : toBengaliDigits(new Date().toLocaleString('en-GB'));
     }
+
+    const bnDept = DEPARTMENTS.find((d) => d.id === selectedDept.id) ?? DEPARTMENTS[0];
+    const resObj =
+      RESIDENTIAL_OPTIONS.find((r) => r.key === residentialKey) ?? RESIDENTIAL_OPTIONS[0];
 
     const submission: AdmissionSubmission = {
       trackingId: generateTrackingId(),
       submittedAt: timeFormatted,
       studentName: studentName.trim(),
       fatherName: fatherName.trim(),
-      department,
-      className,
-      residentialType,
+      department: bnDept.name,
+      departmentId: selectedDept.id,
+      className: bnDept.classes[classIndex] ?? bnDept.classes[0],
+      classIndex,
+      residentialType: resObj.bn,
+      residentialKey,
       mobile: cleanMobile,
       address: address.trim(),
     };
@@ -140,7 +152,7 @@ export function AdmissionFormModal({
     setErrors({});
     setStudentName('');
     setFatherName('');
-    setResidentialType('আবাসিক (বোর্ডিং)');
+    setResidentialKey('boarding');
     setMobile('');
     setAddress('');
     onSubmitted(submission);
@@ -162,13 +174,13 @@ export function AdmissionFormModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="inline-block rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-[#B45309]">
-              শিক্ষাবর্ষ ১৪৪৮ হিজরি
+              {copy.popupSessionBadge}
             </p>
             <h2
               id="admission-popup-title"
               className="mt-2 font-serif text-2xl font-bold text-[#0F172A]"
             >
-              অনলাইন ভর্তি ফরম
+              {copy.popupTitle}
             </h2>
           </div>
 
@@ -176,7 +188,7 @@ export function AdmissionFormModal({
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#475569] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-            aria-label="ভর্তি ফরম বন্ধ করুন"
+            aria-label={copy.popupCloseAria}
           >
             <X className="h-5 w-5" />
           </button>
@@ -189,7 +201,7 @@ export function AdmissionFormModal({
               htmlFor="popup-student-name"
               className="block text-sm font-medium text-[#0F172A]"
             >
-              শিক্ষার্থীর নাম <span className="text-red-600">*</span>
+              {copy.popupStudentName} <span className="text-red-600">*</span>
             </label>
             <input
               id="popup-student-name"
@@ -199,7 +211,7 @@ export function AdmissionFormModal({
                 setStudentName(e.target.value);
                 if (errors.studentName) setErrors((p) => ({ ...p, studentName: undefined }));
               }}
-              placeholder="শিক্ষার্থীর পূর্ণ নাম লিখুন"
+              placeholder={copy.popupStudentPlaceholder}
               className={`mt-1.5 w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                 errors.studentName
                   ? 'border-red-600 focus:ring-red-600/20'
@@ -217,7 +229,7 @@ export function AdmissionFormModal({
               htmlFor="popup-father-name"
               className="block text-sm font-medium text-[#0F172A]"
             >
-              পিতার নাম <span className="text-red-600">*</span>
+              {copy.popupFatherName} <span className="text-red-600">*</span>
             </label>
             <input
               id="popup-father-name"
@@ -227,7 +239,7 @@ export function AdmissionFormModal({
                 setFatherName(e.target.value);
                 if (errors.fatherName) setErrors((p) => ({ ...p, fatherName: undefined }));
               }}
-              placeholder="পিতার পূর্ণ নাম লিখুন"
+              placeholder={copy.popupFatherPlaceholder}
               className={`mt-1.5 w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                 errors.fatherName
                   ? 'border-red-600 focus:ring-red-600/20'
@@ -246,17 +258,17 @@ export function AdmissionFormModal({
                 htmlFor="popup-department"
                 className="block text-sm font-medium text-[#0F172A]"
               >
-                বিভাগ <span className="text-red-600">*</span>
+                {copy.popupDept} <span className="text-red-600">*</span>
               </label>
               <div className="relative mt-1.5">
                 <select
                   id="popup-department"
-                  value={department}
+                  value={departmentId}
                   onChange={(e) => handleDepartmentChange(e.target.value)}
                   className="w-full appearance-none rounded-xl border border-[#E2E8F0] bg-white py-2.5 pr-9 pl-3.5 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                 >
-                  {DEPARTMENTS.map((dept) => (
-                    <option key={dept.id} value={dept.name}>
+                  {activeDepartments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
                       {dept.name}
                     </option>
                   ))}
@@ -273,17 +285,17 @@ export function AdmissionFormModal({
                 htmlFor="popup-class"
                 className="block text-sm font-medium text-[#0F172A]"
               >
-                কোন ক্লাস / জামাতে ভর্তি <span className="text-red-600">*</span>
+                {copy.popupClass} <span className="text-red-600">*</span>
               </label>
               <div className="relative mt-1.5">
                 <select
                   id="popup-class"
-                  value={className}
-                  onChange={(e) => setClassName(e.target.value)}
+                  value={classIndex}
+                  onChange={(e) => setClassIndex(Number(e.target.value))}
                   className="w-full appearance-none rounded-xl border border-[#E2E8F0] bg-white py-2.5 pr-9 pl-3.5 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                 >
-                  {availableClasses.map((cls) => (
-                    <option key={cls} value={cls}>
+                  {selectedDept.classes.map((cls, idx) => (
+                    <option key={cls} value={idx}>
                       {cls}
                     </option>
                   ))}
@@ -303,18 +315,18 @@ export function AdmissionFormModal({
                 htmlFor="popup-residential"
                 className="block text-sm font-medium text-[#0F172A]"
               >
-                আবাসন ধরন <span className="text-red-600">*</span>
+                {copy.labelResidential} <span className="text-red-600">*</span>
               </label>
               <div className="relative mt-1.5">
                 <select
                   id="popup-residential"
-                  value={residentialType}
-                  onChange={(e) => setResidentialType(e.target.value as ResidentialType)}
+                  value={residentialKey}
+                  onChange={(e) => setResidentialKey(e.target.value as ResidentialKey)}
                   className="w-full appearance-none rounded-xl border border-[#E2E8F0] bg-white py-2.5 pr-9 pl-3.5 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                 >
-                  {RESIDENTIAL_TYPES.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {RESIDENTIAL_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {lang === 'en' ? option.en : option.bn}
                     </option>
                   ))}
                 </select>
@@ -330,7 +342,7 @@ export function AdmissionFormModal({
                 htmlFor="popup-mobile"
                 className="block text-sm font-medium text-[#0F172A]"
               >
-                অভিভাবকের মোবাইল নম্বর <span className="text-red-600">*</span>
+                {copy.labelGuardianMobile} <span className="text-red-600">*</span>
               </label>
               <input
                 id="popup-mobile"
@@ -341,7 +353,7 @@ export function AdmissionFormModal({
                   setMobile(e.target.value);
                   if (errors.mobile) setErrors((p) => ({ ...p, mobile: undefined }));
                 }}
-                placeholder="০১৭XXXXXXXX"
+                placeholder={copy.placeholderMobile}
                 className={`mt-1.5 w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 ${
                   errors.mobile
                     ? 'border-red-600 focus:ring-red-600/20'
@@ -360,7 +372,7 @@ export function AdmissionFormModal({
               htmlFor="popup-address"
               className="block text-sm font-medium text-[#0F172A]"
             >
-              বর্তমান ঠিকানা <span className="text-red-600">*</span>
+              {copy.popupAddress} <span className="text-red-600">*</span>
             </label>
             <input
               id="popup-address"
@@ -370,7 +382,7 @@ export function AdmissionFormModal({
                 setAddress(e.target.value);
                 if (errors.address) setErrors((p) => ({ ...p, address: undefined }));
               }}
-              placeholder="গ্রাম/মহল্লা, থানা, জেলা"
+              placeholder={copy.popupAddressPlaceholder}
               className={`mt-1.5 w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                 errors.address
                   ? 'border-red-600 focus:ring-red-600/20'
@@ -388,7 +400,7 @@ export function AdmissionFormModal({
               type="submit"
               className="flex w-full items-center justify-center rounded-xl bg-[#065F46] px-6 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
             >
-              আবেদন নিশ্চিত করুন
+              {copy.popupSubmit}
             </button>
           </div>
         </form>

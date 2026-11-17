@@ -1,18 +1,29 @@
 import { useEffect } from 'react';
 import { CheckCircle2, Printer, RotateCcw, X } from 'lucide-react';
-import { toBengaliDigits, type AdmissionSubmission } from '../data/madrasaData';
+import { DEPARTMENTS, type AdmissionSubmission } from '../data/madrasaData';
+import {
+  DEPARTMENTS_EN,
+  formatDigits,
+  getResidentialLabel,
+  UI_COPY,
+  type Language,
+} from '../data/madrasaTranslations';
 
 interface ReceiptModalProps {
   submission: AdmissionSubmission | null;
+  lang: Language;
   onClose: () => void;
   onNewApplication: () => void;
 }
 
 export function ReceiptModal({
   submission,
+  lang,
   onClose,
   onNewApplication,
 }: ReceiptModalProps) {
+  const copy = UI_COPY[lang];
+
   useEffect(() => {
     if (!submission) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -30,8 +41,21 @@ export function ReceiptModal({
     if (!isoDate) return '';
     const [year, month, day] = isoDate.split('-');
     if (!year || !month || !day) return isoDate;
-    return toBengaliDigits(`${day}/${month}/${year}`);
+    return formatDigits(`${day}/${month}/${year}`, lang);
   };
+
+  const deptList = lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS;
+  const matchedDept = submission.departmentId
+    ? deptList.find((d) => d.id === submission.departmentId)
+    : undefined;
+  const displayDept = matchedDept?.name ?? submission.department;
+  const displayClass =
+    matchedDept && typeof submission.classIndex === 'number'
+      ? (matchedDept.classes[submission.classIndex] ?? submission.className)
+      : submission.className;
+  const displayResidential = submission.residentialKey
+    ? getResidentialLabel(submission.residentialKey, lang)
+    : submission.residentialType;
 
   return (
     <div
@@ -48,13 +72,13 @@ export function ReceiptModal({
         <div className="no-print flex items-center justify-between border-b border-[#E2E8F0] pb-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-[#065F46]">
             <CheckCircle2 className="h-5 w-5 shrink-0" />
-            <span>অনলাইন ভর্তি আবেদন সফলভাবে গৃহীত হয়েছে</span>
+            <span>{copy.receiptSuccessBanner}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#475569] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-            aria-label="রশিদ বন্ধ করুন"
+            aria-label={copy.receiptCloseAria}
           >
             <X className="h-5 w-5" />
           </button>
@@ -68,22 +92,20 @@ export function ReceiptModal({
             id="receipt-modal-title"
             className="mt-1 font-serif text-xl font-bold text-[#0F172A] sm:text-2xl"
           >
-            আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা
+            {copy.brandFull}
           </h3>
-          <p className="mt-1 text-xs text-[#475569]">
-            ভর্তি আবেদন প্রাপ্তি স্বীকারপত্র · শিক্ষাবর্ষ ১৪৪৭–৪৮ হিজরি
-          </p>
+          <p className="mt-1 text-xs text-[#475569]">{copy.receiptSubtitle}</p>
         </div>
 
         <div className="mt-6 flex flex-col items-start justify-between gap-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 sm:flex-row sm:items-center">
           <div>
-            <p className="text-xs text-[#475569]">আবেদন ট্র্যাকিং আইডি</p>
+            <p className="text-xs text-[#475569]">{copy.receiptTrackingLabel}</p>
             <p className="mt-0.5 font-mono text-lg font-bold tracking-wide text-[#065F46] tabular-nums">
               {submission.trackingId}
             </p>
           </div>
           <div className="sm:text-right">
-            <p className="text-xs text-[#475569]">আবেদনের সময়</p>
+            <p className="text-xs text-[#475569]">{copy.receiptSubmittedLabel}</p>
             <p className="mt-0.5 text-sm font-medium text-[#0F172A] tabular-nums">
               {submission.submittedAt}
             </p>
@@ -92,50 +114,48 @@ export function ReceiptModal({
 
         <dl className="mt-6 divide-y divide-[#E2E8F0] border-y border-[#E2E8F0] text-sm">
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">শিক্ষার্থীর নাম</dt>
+            <dt className="text-[#475569]">{copy.receiptRows.studentName}</dt>
             <dd className="font-semibold text-[#0F172A] sm:col-span-2">{submission.studentName}</dd>
           </div>
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">পিতার নাম</dt>
+            <dt className="text-[#475569]">{copy.receiptRows.fatherName}</dt>
             <dd className="font-medium text-[#0F172A] sm:col-span-2">{submission.fatherName}</dd>
           </div>
           {submission.dateOfBirth && (
             <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-              <dt className="text-[#475569]">জন্ম তারিখ</dt>
+              <dt className="text-[#475569]">{copy.receiptRows.dob}</dt>
               <dd className="font-medium text-[#0F172A] tabular-nums sm:col-span-2">
                 {formatDob(submission.dateOfBirth)}
               </dd>
             </div>
           )}
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">নির্বাচিত বিভাগ</dt>
-            <dd className="font-semibold text-[#065F46] sm:col-span-2">{submission.department}</dd>
+            <dt className="text-[#475569]">{copy.receiptRows.department}</dt>
+            <dd className="font-semibold text-[#065F46] sm:col-span-2">{displayDept}</dd>
           </div>
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">ভর্তির ক্লাস / জামাত</dt>
-            <dd className="font-semibold text-[#0F172A] sm:col-span-2">{submission.className}</dd>
+            <dt className="text-[#475569]">{copy.receiptRows.className}</dt>
+            <dd className="font-semibold text-[#0F172A] sm:col-span-2">{displayClass}</dd>
           </div>
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">আবাসন ধরন</dt>
-            <dd className="font-medium text-[#0F172A] sm:col-span-2">{submission.residentialType}</dd>
+            <dt className="text-[#475569]">{copy.receiptRows.residential}</dt>
+            <dd className="font-medium text-[#0F172A] sm:col-span-2">{displayResidential}</dd>
           </div>
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">অভিভাবকের মোবাইল</dt>
+            <dt className="text-[#475569]">{copy.receiptRows.mobile}</dt>
             <dd className="font-medium text-[#0F172A] tabular-nums sm:col-span-2">
-              {toBengaliDigits(submission.mobile)}
+              {formatDigits(submission.mobile, lang)}
             </dd>
           </div>
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
-            <dt className="text-[#475569]">বর্তমান ঠিকানা</dt>
+            <dt className="text-[#475569]">{copy.receiptRows.address}</dt>
             <dd className="text-[#0F172A] sm:col-span-2">{submission.address}</dd>
           </div>
         </dl>
 
         <div className="mt-5 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-xs leading-relaxed text-[#475569]">
-          <p className="font-semibold text-[#0F172A]">পরবর্তী করণীয়:</p>
-          <p className="mt-1">
-            মৌখিক সাক্ষাৎকার ও প্রাথমিক মূল্যায়নের জন্য এই প্রাপ্তি স্বীকারপত্রের প্রিন্ট কপি, শিক্ষার্থীর জন্ম নিবন্ধন সনদের ফটোকপি এবং ২ কপি পাসপোর্ট সাইজের ছবিসহ মাদ্রাসা অফিসে (শনিবার–বৃহস্পতিবার, সকাল ৯:০০–দুপুর ১:০০) উপস্থিত হওয়ার অনুরোধ করা হলো।
-          </p>
+          <p className="font-semibold text-[#0F172A]">{copy.receiptNextStepsTitle}</p>
+          <p className="mt-1">{copy.receiptNextStepsBody}</p>
         </div>
 
         <div className="no-print mt-6 flex flex-wrap items-center justify-between gap-3 pt-2">
@@ -145,7 +165,7 @@ export function ReceiptModal({
             className="inline-flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
           >
             <RotateCcw className="h-4 w-4" />
-            <span>নতুন আবেদন করুন</span>
+            <span>{copy.receiptNewAppBtn}</span>
           </button>
 
           <div className="flex items-center gap-3">
@@ -155,7 +175,7 @@ export function ReceiptModal({
               className="inline-flex items-center gap-2 rounded-lg bg-[#065F46] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
             >
               <Printer className="h-4 w-4" />
-              <span>রশিদ প্রিন্ট করুন</span>
+              <span>{copy.receiptPrintBtn}</span>
             </button>
           </div>
         </div>

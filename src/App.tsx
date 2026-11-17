@@ -26,20 +26,32 @@ import {
   MAX_GALLERY_PHOTOS,
   MAX_NOTICES,
   NOTICES,
-  RESIDENTIAL_TYPES,
   STATS,
   TEACHERS,
   generateTrackingId,
-  getFormattedDates,
   isValidBdMobile,
   normalizeMobileNumber,
   toBengaliDigits,
   type AdmissionSubmission,
   type NoticeCategory,
-  type NoticeItem,
-  type ResidentialType,
-  type TeacherProfile,
 } from './data/madrasaData';
+import {
+  ADMISSION_STEPS_EN,
+  CORE_VALUES_EN,
+  DEPARTMENTS_EN,
+  GALLERY_CATEGORY_EN,
+  GALLERY_ITEMS_EN,
+  NOTICE_CATEGORY_EN,
+  NOTICES_EN,
+  RESIDENTIAL_OPTIONS,
+  STATS_EN,
+  TEACHERS_EN,
+  UI_COPY,
+  formatDigits,
+  getLocalizedFormattedDates,
+  type Language,
+  type ResidentialKey,
+} from './data/madrasaTranslations';
 import type { StudentUser } from './data/studentPortalData';
 import { NoticeModal } from './components/NoticeModal';
 import { ReceiptModal } from './components/ReceiptModal';
@@ -48,26 +60,9 @@ import { TeacherProfileModal } from './components/TeacherProfileModal';
 import { StudentAuthModal } from './components/StudentAuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdmissionFormModal } from './components/AdmissionFormModal';
-
-const NAV_LINKS = [
-  { href: '#home', label: 'হোম' },
-  { href: '#about', label: 'পরিচিতি' },
-  { href: '#departments', label: 'বিভাগসমূহ' },
-  { href: '#notices', label: 'নোটিশ' },
-  { href: '#gallery', label: 'গ্যালারি' },
-  { href: '#teachers', label: 'শিক্ষকমণ্ডলী' },
-  { href: '#admission', label: 'ভর্তি' },
-  { href: '#contact', label: 'যোগাযোগ' },
-];
+import { LanguageToggle } from './components/LanguageToggle';
 
 type NoticeFilter = 'সকল' | NoticeCategory;
-
-const NOTICE_FILTERS: { id: NoticeFilter; label: string }[] = [
-  { id: 'সকল', label: 'সকল নোটিশ' },
-  { id: 'ভর্তি', label: 'ভর্তি' },
-  { id: 'পরীক্ষা', label: 'পরীক্ষা' },
-  { id: 'সাধারণ', label: 'সাধারণ' },
-];
 
 interface FormErrors {
   studentName?: string;
@@ -79,16 +74,44 @@ interface FormErrors {
 }
 
 export default function App() {
+  const [lang, setLang] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem('madrasa_lang');
+      return saved === 'en' ? 'en' : 'bn';
+    } catch {
+      return 'bn';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('madrasa_lang', lang);
+    } catch {
+      // ignore storage errors
+    }
+    document.documentElement.lang = lang;
+    document.title = UI_COPY[lang].pageTitle;
+  }, [lang]);
+
+  const copy = UI_COPY[lang];
+  const activeStats = lang === 'en' ? STATS_EN : STATS;
+  const activeCoreValues = lang === 'en' ? CORE_VALUES_EN : CORE_VALUES;
+  const activeDepartments = lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS;
+  const activeNotices = lang === 'en' ? NOTICES_EN : NOTICES;
+  const activeGalleryItems = lang === 'en' ? GALLERY_ITEMS_EN : INITIAL_GALLERY_ITEMS;
+  const activeTeachers = lang === 'en' ? TEACHERS_EN : TEACHERS;
+  const activeAdmissionSteps = lang === 'en' ? ADMISSION_STEPS_EN : ADMISSION_STEPS;
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [noticeFilter, setNoticeFilter] = useState<NoticeFilter>('সকল');
-  const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
+  const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null);
   const [heroImgFailed, setHeroImgFailed] = useState(false);
   const [libraryImgFailed, setLibraryImgFailed] = useState(false);
   const [muhtamimImgFailed, setMuhtamimImgFailed] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [failedGalleryIds, setFailedGalleryIds] = useState<Record<string, boolean>>({});
   const [showAllTeachers, setShowAllTeachers] = useState(false);
-  const [selectedTeacher, setSelectedTeacher] = useState<TeacherProfile | null>(null);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
   const [failedTeacherIds, setFailedTeacherIds] = useState<Record<string, boolean>>({});
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [studentToken, setStudentToken] = useState<string | null>(() => {
@@ -101,6 +124,15 @@ export default function App() {
   const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const skipNextMeFetchRef = useRef(false);
+
+  const selectedNotice = useMemo(
+    () => activeNotices.find((n) => n.id === selectedNoticeId) ?? null,
+    [activeNotices, selectedNoticeId],
+  );
+  const selectedTeacher = useMemo(
+    () => activeTeachers.find((t) => t.id === selectedTeacherId) ?? null,
+    [activeTeachers, selectedTeacherId],
+  );
 
   useEffect(() => {
     if (!studentToken) {
@@ -164,34 +196,34 @@ export default function App() {
 
   // Online Admission Form & Modal State
   const [admissionModalOpen, setAdmissionModalOpen] = useState(false);
-  const [admissionInitialDept, setAdmissionInitialDept] = useState<string>(DEPARTMENTS[0].name);
+  const [admissionInitialDeptId, setAdmissionInitialDeptId] = useState<string>(DEPARTMENTS[0].id);
   const [studentName, setStudentName] = useState('');
   const [fatherName, setFatherName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [department, setDepartment] = useState(DEPARTMENTS[0].name);
-  const [className, setClassName] = useState(DEPARTMENTS[0].classes[0]);
-  const [residentialType, setResidentialType] = useState<ResidentialType>('আবাসিক (বোর্ডিং)');
+  const [departmentId, setDepartmentId] = useState(DEPARTMENTS[0].id);
+  const [classIndex, setClassIndex] = useState(0);
+  const [residentialKey, setResidentialKey] = useState<ResidentialKey>('boarding');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [latestSubmission, setLatestSubmission] = useState<AdmissionSubmission | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
-  const inlineAvailableClasses = useMemo(() => {
-    const matched = DEPARTMENTS.find((d) => d.name === department);
-    return matched ? matched.classes : DEPARTMENTS[0].classes;
-  }, [department]);
+  const selectedInlineDept = useMemo(
+    () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
+    [activeDepartments, departmentId],
+  );
 
-  const openAdmissionPopup = (deptName?: string) => {
-    setAdmissionInitialDept(deptName ?? DEPARTMENTS[0].name);
+  const openAdmissionPopup = (deptId?: string) => {
+    setAdmissionInitialDeptId(deptId ?? DEPARTMENTS[0].id);
     setAdmissionModalOpen(true);
   };
 
   const isAnyModalOpen =
-    Boolean(selectedNotice) ||
+    Boolean(selectedNoticeId) ||
     receiptModalOpen ||
     lightboxIndex !== null ||
-    Boolean(selectedTeacher) ||
+    Boolean(selectedTeacherId) ||
     authModalOpen ||
     admissionModalOpen;
 
@@ -204,50 +236,53 @@ export default function App() {
     };
   }, [isAnyModalOpen]);
 
-  const { weekday, gregorian, hijri } = useMemo(() => getFormattedDates(), []);
+  const { weekday, gregorian, hijri } = useMemo(
+    () => getLocalizedFormattedDates(lang),
+    [lang],
+  );
 
   const filteredNotices = useMemo(() => {
     const list =
       noticeFilter === 'সকল'
-        ? NOTICES
-        : NOTICES.filter((item) => item.category === noticeFilter);
+        ? activeNotices
+        : activeNotices.filter((item) => item.category === noticeFilter);
     return list.slice(0, MAX_NOTICES);
-  }, [noticeFilter]);
+  }, [activeNotices, noticeFilter]);
 
   const galleryItems = useMemo(
-    () => INITIAL_GALLERY_ITEMS.slice(0, MAX_GALLERY_PHOTOS),
-    [],
+    () => activeGalleryItems.slice(0, MAX_GALLERY_PHOTOS),
+    [activeGalleryItems],
   );
 
   const visibleTeachers = useMemo(
-    () => (showAllTeachers ? TEACHERS : TEACHERS.slice(0, 3)),
-    [showAllTeachers],
+    () => (showAllTeachers ? activeTeachers : activeTeachers.slice(0, 3)),
+    [activeTeachers, showAllTeachers],
   );
 
-  const handleSelectDepartmentAndScroll = (deptName: string) => {
-    openAdmissionPopup(deptName);
+  const handleSelectDepartmentAndScroll = (deptId: string) => {
+    openAdmissionPopup(deptId);
   };
 
   const validateForm = (): FormErrors => {
     const nextErrors: FormErrors = {};
     if (!studentName.trim() || studentName.trim().length < 2) {
-      nextErrors.studentName = 'অনুগ্রহ করে শিক্ষার্থীর পূর্ণ নাম লিখুন।';
+      nextErrors.studentName = copy.validation.studentName;
     }
     if (!fatherName.trim() || fatherName.trim().length < 2) {
-      nextErrors.fatherName = 'অনুগ্রহ করে পিতার পূর্ণ নাম লিখুন।';
+      nextErrors.fatherName = copy.validation.fatherName;
     }
     if (!dateOfBirth) {
-      nextErrors.dateOfBirth = 'শিক্ষার্থীর জন্ম তারিখ নির্বাচন করুন।';
+      nextErrors.dateOfBirth = copy.validation.dob;
     }
-    if (!department) {
-      nextErrors.department = 'অনুগ্রহ করে একটি বিভাগ নির্বাচন করুন।';
+    if (!departmentId) {
+      nextErrors.department = copy.validation.dept;
     }
     const cleanMobile = normalizeMobileNumber(mobile);
     if (!isValidBdMobile(cleanMobile)) {
-      nextErrors.mobile = 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।';
+      nextErrors.mobile = copy.validation.mobile;
     }
     if (!address.trim() || address.trim().length < 4) {
-      nextErrors.address = 'অনুগ্রহ করে পূর্ণ বর্তমান ঠিকানা লিখুন।';
+      nextErrors.address = copy.validation.address;
     }
     return nextErrors;
   };
@@ -264,7 +299,7 @@ export default function App() {
     const now = new Date();
     let timeFormatted = '';
     try {
-      timeFormatted = new Intl.DateTimeFormat('bn-BD', {
+      timeFormatted = new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'bn-BD', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -272,8 +307,15 @@ export default function App() {
         minute: '2-digit',
       }).format(now);
     } catch {
-      timeFormatted = toBengaliDigits(now.toLocaleString('en-GB'));
+      timeFormatted =
+        lang === 'en'
+          ? now.toLocaleString('en-US')
+          : toBengaliDigits(now.toLocaleString('en-GB'));
     }
+
+    const bnDept = DEPARTMENTS.find((d) => d.id === selectedInlineDept.id) ?? DEPARTMENTS[0];
+    const resObj =
+      RESIDENTIAL_OPTIONS.find((r) => r.key === residentialKey) ?? RESIDENTIAL_OPTIONS[0];
 
     const submission: AdmissionSubmission = {
       trackingId: generateTrackingId(),
@@ -281,9 +323,12 @@ export default function App() {
       studentName: studentName.trim(),
       fatherName: fatherName.trim(),
       dateOfBirth,
-      department,
-      className,
-      residentialType,
+      department: bnDept.name,
+      departmentId: selectedInlineDept.id,
+      className: bnDept.classes[classIndex] ?? bnDept.classes[0],
+      classIndex,
+      residentialType: resObj.bn,
+      residentialKey,
       mobile: normalizeMobileNumber(mobile),
       address: address.trim(),
     };
@@ -297,9 +342,9 @@ export default function App() {
     setStudentName('');
     setFatherName('');
     setDateOfBirth('');
-    setDepartment(DEPARTMENTS[0].name);
-    setClassName(DEPARTMENTS[0].classes[0]);
-    setResidentialType('আবাসিক (বোর্ডিং)');
+    setDepartmentId(DEPARTMENTS[0].id);
+    setClassIndex(0);
+    setResidentialKey('boarding');
     setMobile('');
     setAddress('');
     setErrors({});
@@ -309,6 +354,8 @@ export default function App() {
     return (
       <StudentDashboard
         token={studentToken}
+        lang={lang}
+        onChangeLang={setLang}
         onBackToSite={() => setShowDashboard(false)}
         onLogout={handleStudentLogout}
       />
@@ -327,7 +374,7 @@ export default function App() {
               className="inline-flex items-center gap-1.5 transition-colors hover:text-[#065F46] tabular-nums whitespace-nowrap"
             >
               <Phone className="h-3.5 w-3.5 text-[#065F46]" aria-hidden="true" />
-              <span>০১৭১১-০০২২৩৩</span>
+              <span>{copy.phoneDisplay}</span>
             </a>
             <span aria-hidden="true" className="text-slate-300">
               ·
@@ -368,11 +415,11 @@ export default function App() {
 
       {/* 2. Sticky Glassmorphic Navbar */}
       <header className="no-print sticky top-0 z-40 border-b border-[#E2E8F0] bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:gap-8 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 xl:gap-6">
           {/* Zone 1: Brand Mark & Wordmark */}
           <a
             href="#home"
-            className="flex items-center gap-2.5 whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46]"
+            className="flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46]"
           >
             <svg
               width="28"
@@ -405,17 +452,17 @@ export default function App() {
                 strokeLinecap="round"
               />
             </svg>
-            <span className="font-serif text-base font-bold tracking-tight text-[#0F172A] sm:text-lg">
-              আল-জামিয়াতুল ইসলামিয়া
+            <span className="font-serif text-sm font-bold tracking-tight text-[#0F172A] sm:text-base xl:text-lg">
+              {copy.brandShort}
             </span>
           </a>
 
           {/* Zone 2: Desktop Navigation Links */}
           <nav
-            aria-label="প্রধান নেভিগেশন"
-            className="hidden items-center gap-4 text-[13px] font-medium text-[#475569] lg:flex xl:gap-5 xl:text-sm"
+            aria-label="Primary Navigation"
+            className="hidden items-center gap-2.5 text-[12px] font-medium text-[#475569] lg:flex xl:gap-4 xl:text-sm"
           >
-            {NAV_LINKS.map((link) => (
+            {copy.navLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
@@ -426,33 +473,36 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Zone 3: Primary CTA + Student Login + Mobile Toggle */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Zone 3: Online Admission + Ban-Eng Toggle + Student Login + Mobile Menu */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => openAdmissionPopup()}
-              className="hidden items-center justify-center rounded-lg bg-[#065F46] px-3.5 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:inline-flex xl:px-4 xl:text-sm"
+              className="hidden items-center justify-center rounded-lg bg-[#065F46] px-3 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:inline-flex xl:px-4 xl:text-sm"
             >
-              অনলাইন ভর্তি
+              {copy.ctaOnlineAdmission}
             </button>
+
+            {/* Ban | Eng Switcher positioned directly between Online Admission and Student Login */}
+            <LanguageToggle lang={lang} onChange={setLang} />
 
             {currentStudent && studentToken ? (
               <button
                 type="button"
                 onClick={() => setShowDashboard(true)}
-                className="hidden items-center justify-center gap-1.5 rounded-lg border border-[#065F46] bg-[#065F46]/5 px-3.5 py-2 text-xs font-semibold text-[#065F46] transition-colors duration-150 hover:bg-[#065F46]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:inline-flex xl:px-4 xl:text-sm"
+                className="hidden items-center justify-center gap-1.5 rounded-lg border border-[#065F46] bg-[#065F46]/5 px-3 py-2 text-xs font-semibold text-[#065F46] transition-colors duration-150 hover:bg-[#065F46]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:inline-flex xl:px-4 xl:text-sm"
               >
                 <GraduationCap className="h-4 w-4" aria-hidden="true" />
-                <span>ছাত্র ড্যাশবোর্ড</span>
+                <span>{copy.ctaStudentDashboard}</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setAuthModalOpen(true)}
-                className="hidden items-center justify-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-xs font-medium text-[#0F172A] transition-colors duration-150 hover:border-[#065F46] hover:text-[#065F46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:inline-flex xl:px-4 xl:text-sm"
+                className="hidden items-center justify-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-medium text-[#0F172A] transition-colors duration-150 hover:border-[#065F46] hover:text-[#065F46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:inline-flex xl:px-4 xl:text-sm"
               >
                 <LogIn className="h-4 w-4 text-[#065F46]" aria-hidden="true" />
-                <span>ছাত্র লগইন</span>
+                <span>{copy.ctaStudentLogin}</span>
               </button>
             )}
 
@@ -462,7 +512,7 @@ export default function App() {
               className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white text-[#0F172A] transition-colors hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] lg:hidden"
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-nav-drawer"
-              aria-label={mobileMenuOpen ? 'মেনু বন্ধ করুন' : 'মেনু খুলুন'}
+              aria-label={mobileMenuOpen ? copy.menuCloseAria : copy.menuOpenAria}
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -475,8 +525,8 @@ export default function App() {
             id="mobile-nav-drawer"
             className="border-t border-[#E2E8F0] bg-white px-4 py-4 lg:hidden"
           >
-            <nav aria-label="মোবাইল নেভিগেশন" className="flex flex-col space-y-1">
-              {NAV_LINKS.map((link) => (
+            <nav aria-label="Mobile Navigation" className="flex flex-col space-y-1">
+              {copy.navLinks.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}
@@ -486,7 +536,7 @@ export default function App() {
                   {link.label}
                 </a>
               ))}
-              <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -495,8 +545,11 @@ export default function App() {
                   }}
                   className="flex w-full items-center justify-center rounded-lg bg-[#065F46] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#047857]"
                 >
-                  অনলাইন ভর্তি
+                  {copy.ctaOnlineAdmission}
                 </button>
+                <div className="flex items-center">
+                  <LanguageToggle lang={lang} onChange={setLang} fullWidth />
+                </div>
                 {currentStudent && studentToken ? (
                   <button
                     type="button"
@@ -507,7 +560,7 @@ export default function App() {
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#065F46] bg-[#065F46]/5 px-4 py-2.5 text-sm font-semibold text-[#065F46]"
                   >
                     <GraduationCap className="h-4 w-4" aria-hidden="true" />
-                    <span>ছাত্র ড্যাশবোর্ড</span>
+                    <span>{copy.ctaStudentDashboard}</span>
                   </button>
                 ) : (
                   <button
@@ -519,7 +572,7 @@ export default function App() {
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-medium text-[#0F172A]"
                   >
                     <LogIn className="h-4 w-4 text-[#065F46]" aria-hidden="true" />
-                    <span>ছাত্র লগইন</span>
+                    <span>{copy.ctaStudentLogin}</span>
                   </button>
                 )}
               </div>
@@ -537,22 +590,22 @@ export default function App() {
               <div className="flex flex-col justify-center lg:col-span-7">
                 <p className="inline-flex w-fit items-center gap-2 text-sm font-medium text-[#B45309]">
                   <span className="h-px w-6 bg-[#B45309]" aria-hidden="true" />
-                  <span>ভর্তি চলছে · শিক্ষাবর্ষ ১৪৪৭–৪৮ হিজরি</span>
+                  <span>{copy.heroBadge}</span>
                 </p>
 
                 <h1
                   className="mt-5 font-serif text-3xl font-bold leading-[1.25] tracking-tight text-[#0F172A] sm:text-4xl lg:text-[2.85rem]"
                   style={{ textWrap: 'balance' }}
                 >
-                  আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা
+                  {copy.brandFull}
                 </h1>
 
                 <p className="mt-3 font-serif text-lg font-medium text-[#065F46] sm:text-xl">
-                  ইলমে ওহী, আমল ও আধুনিক শিক্ষার সমন্বিত আদর্শ বিদ্যাপীঠ
+                  {copy.heroSubtitle}
                 </p>
 
                 <p className="mt-5 max-w-2xl text-base leading-relaxed text-[#475569] sm:text-[1.0625rem]">
-                  বিশুদ্ধ আকীদা ও সুন্নতে নববীর আলোকে আগামী প্রজন্মের নৈতিক ও মেধার বিকাশ ঘটানোই আমাদের মূল ব্রত। নূরানী, হিফজুল কুরআন এবং কিতাব বিভাগের পাশাপাশি যুগোপযোগী সাধারণ ও কারিগরি শিক্ষায় সুসজ্জিত একটি নিরাপদ শিক্ষাঙ্গন।
+                  {copy.heroDescription}
                 </p>
 
                 <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -561,7 +614,7 @@ export default function App() {
                     onClick={() => openAdmissionPopup()}
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-6 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                   >
-                    <span>ভর্তি আবেদন করুন</span>
+                    <span>{copy.heroApplyBtn}</span>
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </button>
 
@@ -569,20 +622,20 @@ export default function App() {
                     href="#about"
                     className="inline-flex items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-6 py-3 text-sm font-medium text-[#0F172A] transition-colors duration-150 hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                   >
-                    মাদ্রাসা সম্পর্কে জানুন
+                    {copy.heroAboutBtn}
                   </a>
                 </div>
 
                 <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569]">
-                  <span>বেফাকুল মাদারিসিল আরাবিয়া নিবন্ধিত</span>
+                  <span>{copy.heroTrust[0]}</span>
                   <span aria-hidden="true" className="text-slate-300">
                     ·
                   </span>
-                  <span>স্থাপিত: ১৯৯৯ খ্রিস্টাব্দ</span>
+                  <span>{copy.heroTrust[1]}</span>
                   <span aria-hidden="true" className="text-slate-300">
                     ·
                   </span>
-                  <span>মোহাম্মদপুর, ঢাকা-১২০৭</span>
+                  <span>{copy.heroTrust[2]}</span>
                 </div>
               </div>
 
@@ -593,7 +646,7 @@ export default function App() {
                     {!heroImgFailed ? (
                       <img
                         src="/src/assets/images/hero_madrasa_campus_1794935618315.jpg"
-                        alt="আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসার সুশৃঙ্খল ক্যাম্পাস প্রাঙ্গণ"
+                        alt={copy.brandFull}
                         referrerPolicy="no-referrer"
                         onError={() => setHeroImgFailed(true)}
                         className="h-full w-full object-cover"
@@ -602,25 +655,27 @@ export default function App() {
                       <div className="flex h-full min-h-[260px] flex-col items-center justify-center bg-gradient-to-br from-[#F8FAFC] to-slate-100 p-8 text-center">
                         <BookOpen className="h-10 w-10 text-[#065F46]" aria-hidden="true" />
                         <p className="mt-3 font-serif text-base font-semibold text-[#0F172A]">
-                          আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা
+                          {copy.brandFull}
                         </p>
-                        <p className="mt-1 text-xs text-[#475569]">শান্তিপূর্ণ ও পরিবেশবান্ধব শিক্ষাঙ্গন</p>
+                        <p className="mt-1 text-xs text-[#475569]">
+                          {copy.heroCampusFallbackSubtitle}
+                        </p>
                       </div>
                     )}
                   </div>
 
                   <div className="flex items-center justify-between gap-4 border-t border-[#E2E8F0] bg-white px-5 py-4">
                     <div>
-                      <p className="text-xs font-medium text-[#B45309]">ক্যাম্পাস পরিচিতি</p>
+                      <p className="text-xs font-medium text-[#B45309]">{copy.heroCampusTag}</p>
                       <p className="mt-0.5 text-sm font-semibold text-[#0F172A]">
-                        আবাসিক ও অনাবাসিক পূর্ণাঙ্গ ক্যাম্পাস
+                        {copy.heroCampusTitle}
                       </p>
                     </div>
                     <a
                       href="#departments"
                       className="text-xs font-medium text-[#065F46] underline-offset-4 hover:underline whitespace-nowrap shrink-0"
                     >
-                      বিভাগ দেখুন
+                      {copy.heroCampusLink}
                     </a>
                   </div>
                 </div>
@@ -629,7 +684,7 @@ export default function App() {
 
             {/* 4. Minimalist 4-Column Stat Bar */}
             <div className="mt-14 grid grid-cols-2 divide-y divide-[#E2E8F0] rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-              {STATS.map((stat) => (
+              {activeStats.map((stat) => (
                 <div key={stat.label} className="px-6 py-6 text-center sm:text-left">
                   <p className="font-serif text-2xl font-bold text-[#065F46] tabular-nums sm:text-3xl">
                     {stat.value}
@@ -641,7 +696,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* 4. About & Principal's Message (মুহতামিমের বাণী) */}
+        {/* 4. About & Principal's Message */}
         <section
           id="about"
           className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
@@ -655,7 +710,7 @@ export default function App() {
                     {!libraryImgFailed ? (
                       <img
                         src="/src/assets/images/madrasa_library_heritage_1794935619165.jpg"
-                        alt="মাদ্রাসার কেন্দ্রীয় কুতুবখানা ও গবেষণাগার"
+                        alt={copy.aboutLibraryFallback}
                         referrerPolicy="no-referrer"
                         onError={() => setLibraryImgFailed(true)}
                         className="h-full w-full object-cover"
@@ -664,14 +719,14 @@ export default function App() {
                       <div className="flex h-full flex-col items-center justify-center p-8 text-center">
                         <BookOpen className="h-10 w-10 text-[#065F46]" aria-hidden="true" />
                         <p className="mt-3 text-sm font-medium text-[#0F172A]">
-                          কেন্দ্রীয় কুতুবখানা ও দারুল মুতালাআ
+                          {copy.aboutLibraryFallback}
                         </p>
                       </div>
                     )}
                   </div>
                   <div className="border-t border-[#E2E8F0] px-5 py-4">
                     <p className="text-xs font-medium text-[#475569]">
-                      দারুল মুতালাআ · ৪,৫০০+ দুর্লভ ও মৌলিক ইসলামী গ্রন্থসমৃদ্ধ পাঠাগার
+                      {copy.aboutLibraryCaption}
                     </p>
                   </div>
                 </div>
@@ -680,22 +735,22 @@ export default function App() {
               {/* Principal's Message & Core Values */}
               <div className="lg:col-span-7">
                 <div className="text-center">
-                  <p className="text-sm font-medium text-[#B45309]">আমাদের পরিচিতি ও লক্ষ্য</p>
+                  <p className="text-sm font-medium text-[#B45309]">{copy.aboutEyebrow}</p>
                   <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                    মুহতামিমের বাণী
+                    {copy.aboutHeading}
                   </h2>
                 </div>
 
                 <div className="mt-6 border-y border-[#E2E8F0] py-6">
                   <blockquote className="text-base leading-relaxed text-[#0F172A] sm:text-lg">
-                    “বিসমিল্লাহির রাহমানির রাহিম। প্রকৃত শিক্ষা কেবল সনদ অর্জনের মাধ্যম নয়, বরং মানুষের অন্তরকে আলোকিত করা এবং আল্লাহভীরু, যোগ্য ও দায়িত্বশীল মানুষ হিসেবে গড়ে তোলাই ইলমের মূল উদ্দেশ্য। আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা সূচনালগ্ন থেকেই পবিত্র কুরআন ও সুন্নাহর গভীর জ্ঞানের পাশাপাশি সমকালীন বাংলা, ইংরেজি, গণিত ও প্রযুক্তি শিক্ষায় শিক্ষার্থীদের দক্ষ করে তুলতে নিরলস কাজ করে যাচ্ছে।”
+                    {copy.aboutQuote}
                   </blockquote>
                   <div className="mt-5 flex items-center gap-3.5 text-sm">
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#E2E8F0] bg-[#F8FAFC]">
                       {!muhtamimImgFailed ? (
                         <img
                           src="/src/assets/images/teacher_muhtamim_1794936349561.jpg"
-                          alt="মুহতামিম, আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা"
+                          alt={copy.aboutMuhtamimTitle}
                           referrerPolicy="no-referrer"
                           onError={() => setMuhtamimImgFailed(true)}
                           className="h-full w-full object-cover object-top"
@@ -707,17 +762,15 @@ export default function App() {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-[#065F46]">মুহতামিম</p>
-                      <p className="text-xs text-[#475569] sm:text-sm">
-                        আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা
-                      </p>
+                      <p className="font-semibold text-[#065F46]">{copy.aboutMuhtamimTitle}</p>
+                      <p className="text-xs text-[#475569] sm:text-sm">{copy.brandFull}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Core Educational Values */}
                 <div className="mt-8 space-y-5">
-                  {CORE_VALUES.map((item) => (
+                  {activeCoreValues.map((item) => (
                     <div
                       key={item.number}
                       className="flex items-start gap-4 rounded-xl border border-[#E2E8F0] bg-white p-5"
@@ -741,21 +794,21 @@ export default function App() {
           </div>
         </section>
 
-        {/* 5. Academic Departments (বিভাগসমূহ) */}
+        {/* 5. Academic Departments */}
         <section id="departments" className="scroll-mt-16 bg-white py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-medium text-[#B45309]">শিক্ষাক্রম ও বিভাগসমূহ</p>
+              <p className="text-sm font-medium text-[#B45309]">{copy.deptEyebrow}</p>
               <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                সুসংগঠিত চারটি স্বতন্ত্র শিক্ষা বিভাগ
+                {copy.deptHeading}
               </h2>
               <p className="mt-3 text-base leading-relaxed text-[#475569]">
-                শিক্ষার্থীর বয়স, মেধা ও অভিভাবকের লক্ষ্য অনুযায়ী প্রাথমিক মক্তব থেকে দাওরায়ে হাদিস এবং কারিগরি দক্ষতা অর্জনের জন্য পৃথক সিলেবাস ও অভিজ্ঞ শিক্ষকমণ্ডলী রয়েছে।
+                {copy.deptDescription}
               </p>
             </div>
 
             <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {DEPARTMENTS.map((dept) => (
+              {activeDepartments.map((dept) => (
                 <article
                   key={dept.id}
                   className="flex flex-col justify-between rounded-xl border border-[#E2E8F0] bg-white p-6 transition-transform duration-200 hover:-translate-y-1"
@@ -763,7 +816,7 @@ export default function App() {
                   <div>
                     <div className="flex items-center justify-between gap-2 text-xs text-[#475569]">
                       <span className="font-semibold text-[#B45309] tabular-nums">
-                        বিভাগ {dept.code}
+                        {copy.deptBadgePrefix} {dept.code}
                       </span>
                       <span className="tabular-nums">
                         {dept.duration} · {dept.ageGroup}
@@ -795,10 +848,10 @@ export default function App() {
                   <div className="mt-6 border-t border-[#E2E8F0] pt-4">
                     <button
                       type="button"
-                      onClick={() => handleSelectDepartmentAndScroll(dept.name)}
+                      onClick={() => handleSelectDepartmentAndScroll(dept.id)}
                       className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#065F46] transition-colors hover:text-[#047857] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                     >
-                      <span>এই বিভাগে আবেদন করুন</span>
+                      <span>{copy.deptApplyBtn}</span>
                       <ArrowRight className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
@@ -808,7 +861,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* 6. Interactive Notice Board (নোটিশ বোর্ড) */}
+        {/* 6. Interactive Notice Board */}
         <section
           id="notices"
           className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
@@ -816,19 +869,19 @@ export default function App() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center gap-6 text-center">
               <div className="mx-auto max-w-2xl text-center">
-                <p className="text-sm font-medium text-[#B45309]">প্রশাসনিক ও একাডেমিক ঘোষণা</p>
+                <p className="text-sm font-medium text-[#B45309]">{copy.noticesEyebrow}</p>
                 <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                  নোটিশ বোর্ড
+                  {copy.noticesHeading}
                 </h2>
               </div>
 
               {/* Filter Tabs */}
               <div
                 role="tablist"
-                aria-label="নোটিশ শ্রেণিবিন্যাস"
+                aria-label={copy.noticesHeading}
                 className="inline-flex flex-wrap items-center justify-center gap-1 rounded-lg border border-[#E2E8F0] bg-white p-1"
               >
-                {NOTICE_FILTERS.map((tab) => {
+                {copy.noticeFilters.map((tab) => {
                   const isActive = noticeFilter === tab.id;
                   return (
                     <button
@@ -859,7 +912,11 @@ export default function App() {
                 >
                   <div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-[#475569]">
-                      <span className="font-semibold text-[#065F46]">{notice.category}</span>
+                      <span className="font-semibold text-[#065F46]">
+                        {lang === 'en'
+                          ? NOTICE_CATEGORY_EN[notice.category]
+                          : notice.category}
+                      </span>
                       <span aria-hidden="true" className="text-slate-300">
                         ·
                       </span>
@@ -881,11 +938,11 @@ export default function App() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setSelectedNotice(notice)}
+                      onClick={() => setSelectedNoticeId(notice.id)}
                       className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#065F46] transition-colors hover:text-[#047857] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                     >
                       <FileText className="h-4 w-4" aria-hidden="true" />
-                      <span>বিস্তারিত দেখুন</span>
+                      <span>{copy.noticeViewDetails}</span>
                     </button>
                   </div>
                 </article>
@@ -894,16 +951,16 @@ export default function App() {
           </div>
         </section>
 
-        {/* 6.5. Photo Gallery (ফটো গ্যালারি) */}
+        {/* 6.5. Photo Gallery */}
         <section id="gallery" className="scroll-mt-16 bg-white py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-medium text-[#B45309]">ক্যাম্পাস ও শিক্ষাঙ্গনের স্থিরচিত্র</p>
+              <p className="text-sm font-medium text-[#B45309]">{copy.galleryEyebrow}</p>
               <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                ফটো গ্যালারি
+                {copy.galleryHeading}
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-[#475569] sm:text-base">
-                মাদ্রাসার দৈনন্দিন পাঠদান, হিফজ চর্চা, কম্পিউটার ল্যাব, মসজিদ ও বার্ষিক আয়োজনের বিশেষ মুহূর্তসমূহ।
+                {copy.galleryDescription}
               </p>
             </div>
 
@@ -933,14 +990,18 @@ export default function App() {
                       ) : (
                         <div className="flex h-full w-full flex-col items-center justify-center bg-[#F8FAFC] p-4 text-center">
                           <BookOpen className="h-6 w-6 text-[#065F46]" aria-hidden="true" />
-                          <span className="mt-2 text-xs text-[#475569]">{item.category}</span>
+                          <span className="mt-2 text-xs text-[#475569]">
+                            {lang === 'en' ? GALLERY_CATEGORY_EN[item.category] : item.category}
+                          </span>
                         </div>
                       )}
                     </div>
 
                     <div className="flex flex-1 flex-col justify-between border-t border-[#E2E8F0] p-4">
                       <div className="flex items-center gap-1.5 text-xs text-[#475569]">
-                        <span className="font-semibold text-[#065F46]">{item.category}</span>
+                        <span className="font-semibold text-[#065F46]">
+                          {lang === 'en' ? GALLERY_CATEGORY_EN[item.category] : item.category}
+                        </span>
                         <span aria-hidden="true" className="text-slate-300">
                           ·
                         </span>
@@ -957,16 +1018,19 @@ export default function App() {
           </div>
         </section>
 
-        {/* 7. Teachers & Faculty (আমাদের শিক্ষকমণ্ডলী) */}
-        <section id="teachers" className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24">
+        {/* 7. Teachers & Faculty */}
+        <section
+          id="teachers"
+          className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
+        >
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-medium text-[#B45309]">অভিজ্ঞ ও নিবেদিতপ্রাণ উস্তাদবৃন্দ</p>
+              <p className="text-sm font-medium text-[#B45309]">{copy.teachersEyebrow}</p>
               <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                আমাদের শিক্ষকমণ্ডলী
+                {copy.teachersHeading}
               </h2>
               <p className="mt-3 text-base leading-relaxed text-[#475569]">
-                দেশ-বিদেশের স্বনামধন্য দ্বীনি ও সাধারণ শিক্ষাপ্রতিষ্ঠান থেকে উচ্চতর ডিগ্রিপ্রাপ্ত অভিজ্ঞ উস্তাদ ও শিক্ষকদের নিবিড় তত্ত্বাবধানে পাঠদান পরিচালিত হয়।
+                {copy.teachersDescription}
               </p>
             </div>
 
@@ -1016,10 +1080,10 @@ export default function App() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => setSelectedTeacher(teacher)}
+                        onClick={() => setSelectedTeacherId(teacher.id)}
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#065F46] transition-colors hover:text-[#047857] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                       >
-                        <span>প্রোফাইল দেখুন</span>
+                        <span>{copy.teacherViewProfile}</span>
                         <ArrowRight className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </div>
@@ -1029,7 +1093,7 @@ export default function App() {
             </div>
 
             {/* See More / Collapse Button */}
-            {TEACHERS.length > 3 && (
+            {activeTeachers.length > 3 && (
               <div className="mt-10 flex justify-center">
                 <button
                   type="button"
@@ -1038,13 +1102,15 @@ export default function App() {
                 >
                   {showAllTeachers ? (
                     <>
-                      <span>সংক্ষিপ্ত করুন</span>
+                      <span>{copy.teachersCollapse}</span>
                       <ChevronUp className="h-4 w-4" aria-hidden="true" />
                     </>
                   ) : (
                     <>
                       <span>
-                        আরও শিক্ষক দেখুন ({toBengaliDigits(TEACHERS.length - 3)} জন)
+                        {copy.teachersSeeMore(
+                          formatDigits(activeTeachers.length - 3, lang),
+                        )}
                       </span>
                       <ChevronDown className="h-4 w-4" aria-hidden="true" />
                     </>
@@ -1059,24 +1125,24 @@ export default function App() {
         <section id="admission" className="scroll-mt-16 bg-white py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
-              <p className="text-sm font-medium text-[#B45309]">ভর্তি নির্দেশিকা · ১৪৪৭–৪৮ হিজরি</p>
+              <p className="text-sm font-medium text-[#B45309]">{copy.admissionEyebrow}</p>
               <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                ভর্তি প্রক্রিয়া ও অনলাইন আবেদন
+                {copy.admissionHeading}
               </h2>
               <p className="mt-3 text-base leading-relaxed text-[#475569]">
-                সহজ চারটি ধাপে আপনার সন্তানের ভর্তি প্রক্রিয়া সম্পন্ন করুন। অনলাইনে আবেদন জমা দেওয়ার সাথে সাথেই একটি ট্র্যাকিং আইডিসহ প্রিন্টযোগ্য প্রাপ্তি স্বীকারপত্র পাবেন।
+                {copy.admissionDescription}
               </p>
             </div>
 
             {/* 4-Step Horizontal Process */}
             <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {ADMISSION_STEPS.map((item) => (
+              {activeAdmissionSteps.map((item) => (
                 <div
                   key={item.step}
                   className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-6"
                 >
                   <p className="font-serif text-lg font-bold text-[#B45309] tabular-nums">
-                    ধাপ {item.step}
+                    {copy.stepPrefix} {formatDigits(item.step, lang)}
                   </p>
                   <h3 className="mt-2 font-serif text-base font-semibold text-[#0F172A]">
                     {item.title}
@@ -1096,11 +1162,9 @@ export default function App() {
               <div className="flex flex-col items-center gap-4 border-b border-[#E2E8F0] pb-6 text-center">
                 <div className="mx-auto max-w-2xl text-center">
                   <h3 className="font-serif text-xl font-bold text-[#0F172A] sm:text-2xl">
-                    অনলাইন ভর্তি আবেদন ফরম
+                    {copy.inlineFormTitle}
                   </h3>
-                  <p className="mt-1 text-sm text-[#475569]">
-                    তারকাচিহ্নিত (*) সকল ঘর সঠিকভাবে পূরণ করুন।
-                  </p>
+                  <p className="mt-1 text-sm text-[#475569]">{copy.inlineFormSubtitle}</p>
                 </div>
 
                 {latestSubmission && (
@@ -1110,7 +1174,7 @@ export default function App() {
                     className="inline-flex items-center gap-2 rounded-lg border border-[#065F46]/30 bg-[#065F46]/5 px-4 py-2 text-xs font-semibold text-[#065F46] transition-colors hover:bg-[#065F46]/10 whitespace-nowrap shrink-0 sm:text-sm"
                   >
                     <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    <span>সর্বশেষ রশিদ দেখুন ({latestSubmission.trackingId})</span>
+                    <span>{copy.latestReceiptBtn(latestSubmission.trackingId)}</span>
                   </button>
                 )}
               </div>
@@ -1123,7 +1187,7 @@ export default function App() {
                       htmlFor="studentName"
                       className="block text-sm font-medium text-[#0F172A]"
                     >
-                      শিক্ষার্থীর পূর্ণ নাম <span className="text-red-600">*</span>
+                      {copy.labelStudentFullName} <span className="text-red-600">*</span>
                     </label>
                     <input
                       id="studentName"
@@ -1136,7 +1200,7 @@ export default function App() {
                           setErrors((prev) => ({ ...prev, studentName: undefined }));
                         }
                       }}
-                      placeholder="যেমন: মুহাম্মদ আব্দুল্লাহ আল-মামুন"
+                      placeholder={copy.placeholderStudentFullName}
                       className={`mt-2 w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                         errors.studentName
                           ? 'border-red-600 focus:ring-red-600/20'
@@ -1156,7 +1220,7 @@ export default function App() {
                       htmlFor="fatherName"
                       className="block text-sm font-medium text-[#0F172A]"
                     >
-                      পিতার পূর্ণ নাম <span className="text-red-600">*</span>
+                      {copy.labelFatherFullName} <span className="text-red-600">*</span>
                     </label>
                     <input
                       id="fatherName"
@@ -1169,7 +1233,7 @@ export default function App() {
                           setErrors((prev) => ({ ...prev, fatherName: undefined }));
                         }
                       }}
-                      placeholder="যেমন: মাওলানা আব্দুর রহমান"
+                      placeholder={copy.placeholderFatherFullName}
                       className={`mt-2 w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                         errors.fatherName
                           ? 'border-red-600 focus:ring-red-600/20'
@@ -1189,7 +1253,7 @@ export default function App() {
                       htmlFor="dateOfBirth"
                       className="block text-sm font-medium text-[#0F172A]"
                     >
-                      জন্ম তারিখ <span className="text-red-600">*</span>
+                      {copy.labelDob} <span className="text-red-600">*</span>
                     </label>
                     <input
                       id="dateOfBirth"
@@ -1222,19 +1286,15 @@ export default function App() {
                       htmlFor="department"
                       className="block text-sm font-medium text-[#0F172A]"
                     >
-                      বিভাগ নির্বাচন করুন <span className="text-red-600">*</span>
+                      {copy.labelSelectDept} <span className="text-red-600">*</span>
                     </label>
                     <select
                       id="department"
                       name="department"
-                      value={department}
+                      value={departmentId}
                       onChange={(e) => {
-                        const nextDept = e.target.value;
-                        setDepartment(nextDept);
-                        const matched = DEPARTMENTS.find((d) => d.name === nextDept);
-                        if (matched && matched.classes.length > 0) {
-                          setClassName(matched.classes[0]);
-                        }
+                        setDepartmentId(e.target.value);
+                        setClassIndex(0);
                         if (errors.department) {
                           setErrors((prev) => ({ ...prev, department: undefined }));
                         }
@@ -1245,8 +1305,8 @@ export default function App() {
                           : 'border-[#E2E8F0] focus:border-[#065F46] focus:ring-[#065F46]/15'
                       }`}
                     >
-                      {DEPARTMENTS.map((dept) => (
-                        <option key={dept.id} value={dept.name}>
+                      {activeDepartments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
                           {dept.name} ({dept.duration})
                         </option>
                       ))}
@@ -1264,17 +1324,17 @@ export default function App() {
                       htmlFor="inline-className"
                       className="block text-sm font-medium text-[#0F172A]"
                     >
-                      ভর্তির ক্লাস / জামাত <span className="text-red-600">*</span>
+                      {copy.labelSelectClass} <span className="text-red-600">*</span>
                     </label>
                     <select
                       id="inline-className"
                       name="className"
-                      value={className}
-                      onChange={(e) => setClassName(e.target.value)}
+                      value={classIndex}
+                      onChange={(e) => setClassIndex(Number(e.target.value))}
                       className="mt-2 w-full rounded-lg border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                     >
-                      {inlineAvailableClasses.map((cls) => (
-                        <option key={cls} value={cls}>
+                      {selectedInlineDept.classes.map((cls, idx) => (
+                        <option key={cls} value={idx}>
                           {cls}
                         </option>
                       ))}
@@ -1284,14 +1344,14 @@ export default function App() {
                   {/* Residential Type */}
                   <div>
                     <span className="block text-sm font-medium text-[#0F172A]">
-                      আবাসন ধরন <span className="text-red-600">*</span>
+                      {copy.labelResidential} <span className="text-red-600">*</span>
                     </span>
                     <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                      {RESIDENTIAL_TYPES.map((option) => {
-                        const selected = residentialType === option;
+                      {RESIDENTIAL_OPTIONS.map((option) => {
+                        const selected = residentialKey === option.key;
                         return (
                           <label
-                            key={option}
+                            key={option.key}
                             className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
                               selected
                                 ? 'border-[#065F46] bg-[#065F46]/5 text-[#065F46]'
@@ -1301,9 +1361,9 @@ export default function App() {
                             <input
                               type="radio"
                               name="residentialType"
-                              value={option}
+                              value={option.key}
                               checked={selected}
-                              onChange={() => setResidentialType(option)}
+                              onChange={() => setResidentialKey(option.key)}
                               className="sr-only"
                             />
                             <span
@@ -1312,7 +1372,7 @@ export default function App() {
                               }`}
                               aria-hidden="true"
                             />
-                            <span>{option}</span>
+                            <span>{lang === 'en' ? option.en : option.bn}</span>
                           </label>
                         );
                       })}
@@ -1325,7 +1385,7 @@ export default function App() {
                       htmlFor="mobile"
                       className="block text-sm font-medium text-[#0F172A]"
                     >
-                      অভিভাবকের মোবাইল নম্বর <span className="text-red-600">*</span>
+                      {copy.labelGuardianMobile} <span className="text-red-600">*</span>
                     </label>
                     <input
                       id="mobile"
@@ -1339,7 +1399,7 @@ export default function App() {
                           setErrors((prev) => ({ ...prev, mobile: undefined }));
                         }
                       }}
-                      placeholder="017XXXXXXXX"
+                      placeholder={copy.placeholderMobile}
                       className={`mt-2 w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 ${
                         errors.mobile
                           ? 'border-red-600 focus:ring-red-600/20'
@@ -1358,7 +1418,7 @@ export default function App() {
                     htmlFor="address"
                     className="block text-sm font-medium text-[#0F172A]"
                   >
-                    বর্তমান ও স্থায়ী ঠিকানা <span className="text-red-600">*</span>
+                    {copy.labelFullAddress} <span className="text-red-600">*</span>
                   </label>
                   <textarea
                     id="address"
@@ -1371,7 +1431,7 @@ export default function App() {
                         setErrors((prev) => ({ ...prev, address: undefined }));
                       }
                     }}
-                    placeholder="বাড়ি/গ্রাম, সড়ক, ডাকঘর, থানা ও জেলা উল্লেখ করুন"
+                    placeholder={copy.placeholderFullAddress}
                     className={`mt-2 w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                       errors.address
                         ? 'border-red-600 focus:ring-red-600/20'
@@ -1385,13 +1445,13 @@ export default function App() {
 
                 <div className="flex flex-col items-start justify-between gap-4 border-t border-[#E2E8F0] pt-6 sm:flex-row sm:items-center">
                   <p className="text-xs leading-relaxed text-[#475569]">
-                    আবেদন জমা দেওয়ার পর প্রাপ্ত ট্র্যাকিং আইডি সংরক্ষণ করুন এবং সাক্ষাৎকারের দিন সাথে আনুন।
+                    {copy.inlineFormNote}
                   </p>
                   <button
                     type="submit"
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-7 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
                   >
-                    <span>আবেদন জমা দিন ও রশিদ নিন</span>
+                    <span>{copy.inlineFormSubmit}</span>
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
@@ -1402,27 +1462,28 @@ export default function App() {
       </main>
 
       {/* 8. Clean Minimal 4-Column Footer */}
-      <footer id="contact" className="no-print scroll-mt-16 border-t border-[#E2E8F0] bg-[#F8FAFC] pt-16 pb-10">
+      <footer
+        id="contact"
+        className="no-print scroll-mt-16 border-t border-[#E2E8F0] bg-[#F8FAFC] pt-16 pb-10"
+      >
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             {/* Column 1: Madrasa Info */}
             <div>
-              <p className="font-serif text-lg font-bold text-[#0F172A]">
-                আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা
-              </p>
+              <p className="font-serif text-lg font-bold text-[#0F172A]">{copy.brandFull}</p>
               <p className="mt-3 text-sm leading-relaxed text-[#475569]">
-                পবিত্র কুরআন ও সুন্নাহর বিশুদ্ধ শিক্ষার পাশাপাশি আধুনিক ও কারিগরি দক্ষতায় সমৃদ্ধ একটি আদর্শ দ্বীনি শিক্ষাপ্রতিষ্ঠান।
+                {copy.footerAboutDesc}
               </p>
-              <p className="mt-4 text-xs text-[#475569]">
-                বেফাক নিবন্ধন নং: ১২৪৮৫ · স্থাপিত ১৯৯৯ খ্রি.
-              </p>
+              <p className="mt-4 text-xs text-[#475569]">{copy.footerReg}</p>
             </div>
 
             {/* Column 2: Quick Links */}
             <div>
-              <h3 className="font-serif text-sm font-bold text-[#0F172A]">দ্রুত লিংক</h3>
+              <h3 className="font-serif text-sm font-bold text-[#0F172A]">
+                {copy.footerQuickLinks}
+              </h3>
               <ul className="mt-4 space-y-2.5 text-sm text-[#475569]">
-                {NAV_LINKS.map((link) => (
+                {copy.navLinks.map((link) => (
                   <li key={link.href}>
                     <a
                       href={link.href}
@@ -1437,16 +1498,18 @@ export default function App() {
 
             {/* Column 3: Campus Address & Map Link */}
             <div>
-              <h3 className="font-serif text-sm font-bold text-[#0F172A]">ক্যাম্পাস ঠিকানা</h3>
+              <h3 className="font-serif text-sm font-bold text-[#0F172A]">
+                {copy.footerCampusTitle}
+              </h3>
               <ul className="mt-4 space-y-3 text-sm text-[#475569]">
                 <li className="flex items-start gap-2.5">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
-                  <span>বাড়ি নং ৪২, মাদ্রাসা রোড, মোহাম্মদপুর, ঢাকা-১২০৭</span>
+                  <span>{copy.footerAddress}</span>
                 </li>
                 <li className="flex items-center gap-2.5 tabular-nums">
                   <Phone className="h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
                   <a href="tel:+8801711002233" className="hover:text-[#065F46]">
-                    +৮৮০ ১৭১১-০০২২৩৩
+                    {copy.phoneFooter}
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5">
@@ -1466,33 +1529,35 @@ export default function App() {
                 className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#065F46] underline-offset-4 hover:underline"
               >
                 <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>গুগল ম্যাপে অবস্থান দেখুন</span>
+                <span>{copy.footerMapLink}</span>
               </a>
             </div>
 
             {/* Column 4: Office Hours */}
             <div>
-              <h3 className="font-serif text-sm font-bold text-[#0F172A]">অফিস ও সাক্ষাৎ সময়</h3>
+              <h3 className="font-serif text-sm font-bold text-[#0F172A]">
+                {copy.footerOfficeTitle}
+              </h3>
               <ul className="mt-4 space-y-2.5 text-sm text-[#475569]">
                 <li className="flex items-start gap-2.5">
                   <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
                   <div>
-                    <p className="font-medium text-[#0F172A]">শনিবার – বৃহস্পতিবার</p>
-                    <p className="tabular-nums">সকাল ৮:০০ – বিকাল ৪:০০</p>
+                    <p className="font-medium text-[#0F172A]">{copy.footerDays}</p>
+                    <p className="tabular-nums">{copy.footerHours}</p>
                   </div>
                 </li>
                 <li className="border-t border-[#E2E8F0] pt-2.5">
-                  <p className="font-medium text-[#0F172A]">ভর্তি সাক্ষাৎকার</p>
-                  <p className="tabular-nums">সকাল ৯:০০ – দুপুর ১:০০</p>
+                  <p className="font-medium text-[#0F172A]">{copy.footerInterviewLabel}</p>
+                  <p className="tabular-nums">{copy.footerInterviewHours}</p>
                 </li>
-                <li className="text-xs text-[#B45309]">শুক্রবার সাপ্তাহিক ছুটি</li>
+                <li className="text-xs text-[#B45309]">{copy.footerHoliday}</li>
               </ul>
             </div>
           </div>
 
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569] sm:flex-row">
-            <p>© ২০২৬ আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা। সর্বস্বত্ব সংরক্ষিত।</p>
-            <p>শিক্ষা · আদব · তাকওয়া</p>
+            <p>{copy.footerCopyright}</p>
+            <p>{copy.footerMotto}</p>
           </div>
         </div>
       </footer>
@@ -1500,11 +1565,13 @@ export default function App() {
       {/* Interactive Modals */}
       <NoticeModal
         notice={selectedNotice}
-        onClose={() => setSelectedNotice(null)}
+        lang={lang}
+        onClose={() => setSelectedNoticeId(null)}
       />
 
       <ReceiptModal
         submission={receiptModalOpen ? latestSubmission : null}
+        lang={lang}
         onClose={() => setReceiptModalOpen(false)}
         onNewApplication={handleResetForNewApplication}
       />
@@ -1512,24 +1579,28 @@ export default function App() {
       <GalleryLightboxModal
         items={galleryItems}
         activeIndex={lightboxIndex}
+        lang={lang}
         onClose={() => setLightboxIndex(null)}
         onChangeIndex={setLightboxIndex}
       />
 
       <TeacherProfileModal
         teacher={selectedTeacher}
-        onClose={() => setSelectedTeacher(null)}
+        lang={lang}
+        onClose={() => setSelectedTeacherId(null)}
       />
 
       <StudentAuthModal
         isOpen={authModalOpen}
+        lang={lang}
         onClose={() => setAuthModalOpen(false)}
         onAuthSuccess={handleStudentAuthSuccess}
       />
 
       <AdmissionFormModal
         isOpen={admissionModalOpen}
-        initialDepartment={admissionInitialDept}
+        initialDepartmentId={admissionInitialDeptId}
+        lang={lang}
         onClose={() => setAdmissionModalOpen(false)}
         onSubmitted={(submission) => {
           setLatestSubmission(submission);

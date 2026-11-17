@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Award, BookOpen, Briefcase, GraduationCap, User, X } from 'lucide-react';
 import type { TeacherProfile } from '../data/madrasaData';
+import { UI_COPY, type Language } from '../data/madrasaTranslations';
 
 interface TeacherProfileModalProps {
   teacher: TeacherProfile | null;
+  lang: Language;
   onClose: () => void;
 }
 
-export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalProps) {
+export function TeacherProfileModal({ teacher, lang, onClose }: TeacherProfileModalProps) {
   const [imgFailed, setImgFailed] = useState(false);
+  const copy = UI_COPY[lang];
 
   useEffect(() => {
     setImgFailed(false);
@@ -40,12 +43,12 @@ export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalPro
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
-          <p className="text-xs font-semibold text-[#B45309]">শিক্ষক পরিচিতি ও প্রোফাইল</p>
+          <p className="text-xs font-semibold text-[#B45309]">{copy.teacherModalHeader}</p>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#475569] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-            aria-label="প্রোফাইল বন্ধ করুন"
+            aria-label={copy.teacherModalClose}
           >
             <X className="h-5 w-5" />
           </button>
@@ -98,7 +101,7 @@ export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalPro
           <div className="mt-6 border-t border-[#E2E8F0] pt-5">
             <h4 className="flex items-center gap-2 font-serif text-sm font-bold text-[#0F172A]">
               <BookOpen className="h-4 w-4 text-[#065F46]" aria-hidden="true" />
-              <span>পাঠদানের বিষয়সমূহ</span>
+              <span>{copy.teacherSubjectsTitle}</span>
             </h4>
             <ul className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-[#475569]">
               {teacher.subjects.map((subject, idx) => (
@@ -117,7 +120,7 @@ export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalPro
           <div className="mt-5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
             <h4 className="flex items-center gap-2 font-serif text-sm font-bold text-[#0F172A]">
               <Award className="h-4 w-4 text-[#B45309]" aria-hidden="true" />
-              <span>সংক্ষিপ্ত পরিচিতি</span>
+              <span>{copy.teacherBioTitle}</span>
             </h4>
             <p className="mt-1.5 text-sm leading-relaxed text-[#475569]">{teacher.bio}</p>
           </div>
@@ -128,7 +131,7 @@ export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalPro
               onClick={onClose}
               className="rounded-lg bg-[#065F46] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
             >
-              বন্ধ করুন
+              {copy.closeBtn}
             </button>
           </div>
         </div>

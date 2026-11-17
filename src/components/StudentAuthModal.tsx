@@ -2,9 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Eye, EyeOff, GraduationCap, Lock, Mail, Phone, User, X } from 'lucide-react';
 import type { StudentUser } from '../data/studentPortalData';
 import { isValidBdMobile, normalizeMobileNumber } from '../data/madrasaData';
+import { UI_COPY, type Language } from '../data/madrasaTranslations';
 
 interface StudentAuthModalProps {
   isOpen: boolean;
+  lang: Language;
   onClose: () => void;
   onAuthSuccess: (token: string, student: StudentUser) => void;
 }
@@ -13,9 +15,13 @@ type AuthTab = 'login' | 'register';
 
 export function StudentAuthModal({
   isOpen,
+  lang,
   onClose,
   onAuthSuccess,
 }: StudentAuthModalProps) {
+  const copy = UI_COPY[lang];
+  const a = copy.auth;
+
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -58,11 +64,11 @@ export function StudentAuthModal({
 
     const cleanPhone = normalizeMobileNumber(loginPhone);
     if (!isValidBdMobile(cleanPhone)) {
-      setErrorMsg('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।');
+      setErrorMsg(a.errPhone);
       return;
     }
     if (!loginPassword) {
-      setErrorMsg('অনুগ্রহ করে পাসওয়ার্ড লিখুন।');
+      setErrorMsg(a.errPasswordEmpty);
       return;
     }
 
@@ -79,13 +85,13 @@ export function StudentAuthModal({
         error?: string;
       };
       if (!response.ok || !data.token || !data.student) {
-        setErrorMsg(data.error ?? 'লগইন সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।');
+        setErrorMsg(data.error ?? a.errLoginFailed);
         return;
       }
       onAuthSuccess(data.token, data.student);
       setLoginPassword('');
     } catch {
-      setErrorMsg('সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
+      setErrorMsg(a.errNetwork);
     } finally {
       setLoading(false);
     }
@@ -99,23 +105,23 @@ export function StudentAuthModal({
     const cleanEmail = regEmail.trim().toLowerCase();
 
     if (regName.trim().length < 2) {
-      setErrorMsg('অনুগ্রহ করে শিক্ষার্থীর পূর্ণ নাম লিখুন।');
+      setErrorMsg(a.errName);
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setErrorMsg('সঠিক ইমেইল ঠিকানা প্রদান করুন।');
+      setErrorMsg(a.errEmail);
       return;
     }
     if (!isValidBdMobile(cleanPhone)) {
-      setErrorMsg('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।');
+      setErrorMsg(a.errPhone);
       return;
     }
     if (regPassword.length < 6) {
-      setErrorMsg('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+      setErrorMsg(a.errPasswordShort);
       return;
     }
     if (regPassword !== regConfirmPassword) {
-      setErrorMsg('পাসওয়ার্ড এবং নিশ্চিত পাসওয়ার্ড মিলছে না।');
+      setErrorMsg(a.errPasswordMismatch);
       return;
     }
 
@@ -138,14 +144,14 @@ export function StudentAuthModal({
         error?: string;
       };
       if (!response.ok || !data.token || !data.student) {
-        setErrorMsg(data.error ?? 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।');
+        setErrorMsg(data.error ?? a.errRegFailed);
         return;
       }
       onAuthSuccess(data.token, data.student);
       setRegPassword('');
       setRegConfirmPassword('');
     } catch {
-      setErrorMsg('সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
+      setErrorMsg(a.errNetwork);
     } finally {
       setLoading(false);
     }
@@ -167,14 +173,14 @@ export function StudentAuthModal({
           <div className="flex items-center gap-2.5">
             <GraduationCap className="h-5 w-5 text-[#065F46]" aria-hidden="true" />
             <h2 id="student-auth-title" className="font-serif text-lg font-bold text-[#0F172A]">
-              ছাত্র পোর্টাল
+              {a.portalTitle}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#475569] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-            aria-label="বন্ধ করুন"
+            aria-label={copy.closeBtn}
           >
             <X className="h-5 w-5" />
           </button>
@@ -184,7 +190,7 @@ export function StudentAuthModal({
           {/* Segmented Auth Tabs */}
           <div
             role="tablist"
-            aria-label="লগইন ও রেজিস্ট্রেশন"
+            aria-label={a.portalTitle}
             className="grid grid-cols-2 gap-1 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-1"
           >
             <button
@@ -198,7 +204,7 @@ export function StudentAuthModal({
                   : 'text-[#475569] hover:text-[#0F172A]'
               }`}
             >
-              ছাত্র লগইন
+              {a.loginTab}
             </button>
             <button
               type="button"
@@ -211,7 +217,7 @@ export function StudentAuthModal({
                   : 'text-[#475569] hover:text-[#0F172A]'
               }`}
             >
-              নতুন রেজিস্ট্রেশন
+              {a.registerTab}
             </button>
           </div>
 
@@ -228,7 +234,7 @@ export function StudentAuthModal({
             <form onSubmit={handleLoginSubmit} noValidate className="mt-5 space-y-4">
               <div>
                 <label htmlFor="login-phone" className="block text-sm font-medium text-[#0F172A]">
-                  মোবাইল নম্বর
+                  {a.mobileLabel}
                 </label>
                 <div className="relative mt-1.5">
                   <Phone
@@ -241,7 +247,7 @@ export function StudentAuthModal({
                     inputMode="numeric"
                     value={loginPhone}
                     onChange={(e) => setLoginPhone(e.target.value)}
-                    placeholder="017XXXXXXXX"
+                    placeholder={copy.placeholderMobile}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-4 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 tabular-nums focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                 </div>
@@ -252,7 +258,7 @@ export function StudentAuthModal({
                   htmlFor="login-password"
                   className="block text-sm font-medium text-[#0F172A]"
                 >
-                  পাসওয়ার্ড
+                  {a.passwordLabel}
                 </label>
                 <div className="relative mt-1.5">
                   <Lock
@@ -264,14 +270,14 @@ export function StudentAuthModal({
                     type={showLoginPassword ? 'text' : 'password'}
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="আপনার পাসওয়ার্ড লিখুন"
+                    placeholder={a.passwordPlaceholder}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-10 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword((prev) => !prev)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0F172A]"
-                    aria-label={showLoginPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                    aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
                   >
                     {showLoginPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -287,17 +293,17 @@ export function StudentAuthModal({
                 disabled={loading}
                 className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#065F46] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? 'লগইন হচ্ছে...' : 'লগইন করুন'}
+                {loading ? a.loggingIn : a.loginBtn}
               </button>
 
               <p className="text-center text-xs text-[#475569]">
-                একাউন্ট না থাকলে{' '}
+                {a.noAccount}{' '}
                 <button
                   type="button"
                   onClick={() => switchTab('register')}
                   className="font-semibold text-[#065F46] underline-offset-4 hover:underline"
                 >
-                  নতুন রেজিস্ট্রেশন করুন
+                  {a.goRegister}
                 </button>
               </p>
             </form>
@@ -305,7 +311,7 @@ export function StudentAuthModal({
             <form onSubmit={handleRegisterSubmit} noValidate className="mt-5 space-y-3.5">
               <div>
                 <label htmlFor="reg-name" className="block text-sm font-medium text-[#0F172A]">
-                  শিক্ষার্থীর নাম
+                  {a.nameLabel}
                 </label>
                 <div className="relative mt-1">
                   <User
@@ -317,7 +323,7 @@ export function StudentAuthModal({
                     type="text"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="যেমন: মুহাম্মদ হাসান আলী"
+                    placeholder={a.namePlaceholder}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-4 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                 </div>
@@ -325,7 +331,7 @@ export function StudentAuthModal({
 
               <div>
                 <label htmlFor="reg-email" className="block text-sm font-medium text-[#0F172A]">
-                  ইমেইল ঠিকানা
+                  {a.emailLabel}
                 </label>
                 <div className="relative mt-1">
                   <Mail
@@ -337,7 +343,7 @@ export function StudentAuthModal({
                     type="email"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="student@example.com"
+                    placeholder={a.emailPlaceholder}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-4 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                 </div>
@@ -345,7 +351,7 @@ export function StudentAuthModal({
 
               <div>
                 <label htmlFor="reg-phone" className="block text-sm font-medium text-[#0F172A]">
-                  ফোন নাম্বার
+                  {a.phoneLabel}
                 </label>
                 <div className="relative mt-1">
                   <Phone
@@ -358,7 +364,7 @@ export function StudentAuthModal({
                     inputMode="numeric"
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="017XXXXXXXX"
+                    placeholder={copy.placeholderMobile}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-4 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 tabular-nums focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                 </div>
@@ -366,7 +372,7 @@ export function StudentAuthModal({
 
               <div>
                 <label htmlFor="reg-password" className="block text-sm font-medium text-[#0F172A]">
-                  পাসওয়ার্ড
+                  {a.passwordLabel}
                 </label>
                 <div className="relative mt-1">
                   <Lock
@@ -378,14 +384,14 @@ export function StudentAuthModal({
                     type={showRegPassword ? 'text' : 'password'}
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="কমপক্ষে ৬ অক্ষর"
+                    placeholder={a.regPasswordPlaceholder}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-10 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                   <button
                     type="button"
                     onClick={() => setShowRegPassword((prev) => !prev)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0F172A]"
-                    aria-label={showRegPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                    aria-label={showRegPassword ? 'Hide password' : 'Show password'}
                   >
                     {showRegPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -401,7 +407,7 @@ export function StudentAuthModal({
                   htmlFor="reg-confirm-password"
                   className="block text-sm font-medium text-[#0F172A]"
                 >
-                  নিশ্চিত পাসওয়ার্ড
+                  {a.confirmPasswordLabel}
                 </label>
                 <div className="relative mt-1">
                   <Lock
@@ -413,7 +419,7 @@ export function StudentAuthModal({
                     type={showRegPassword ? 'text' : 'password'}
                     value={regConfirmPassword}
                     onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    placeholder="পুনরায় পাসওয়ার্ড লিখুন"
+                    placeholder={a.confirmPasswordPlaceholder}
                     className="w-full rounded-lg border border-[#E2E8F0] bg-white py-2.5 pr-4 pl-10 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                   />
                 </div>
@@ -424,17 +430,17 @@ export function StudentAuthModal({
                 disabled={loading}
                 className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#065F46] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? 'রেজিস্ট্রেশন হচ্ছে...' : 'রেজিস্ট্রেশন সম্পন্ন করুন'}
+                {loading ? a.registering : a.registerBtn}
               </button>
 
               <p className="text-center text-xs text-[#475569]">
-                ইতিমধ্যে একাউন্ট থাকলে{' '}
+                {a.haveAccount}{' '}
                 <button
                   type="button"
                   onClick={() => switchTab('login')}
                   className="font-semibold text-[#065F46] underline-offset-4 hover:underline"
                 >
-                  লগইন করুন
+                  {a.goLogin}
                 </button>
               </p>
             </form>

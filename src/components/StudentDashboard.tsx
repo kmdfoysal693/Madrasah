@@ -13,42 +13,73 @@ import {
   LogOut,
   Printer,
 } from 'lucide-react';
-import { NOTICES, MAX_NOTICES, toBengaliDigits, type NoticeCategory, type NoticeItem } from '../data/madrasaData';
+import {
+  MAX_NOTICES,
+  NOTICES,
+  type NoticeCategory,
+  type NoticeItem,
+} from '../data/madrasaData';
+import {
+  formatDigits,
+  NOTICE_CATEGORY_EN,
+  NOTICES_EN,
+  translatePortalValue,
+  UI_COPY,
+  type Language,
+} from '../data/madrasaTranslations';
 import type { StudentDashboardPayload, TuitionRecord } from '../data/studentPortalData';
+import { LanguageToggle } from './LanguageToggle';
 import { NoticeModal } from './NoticeModal';
 
 interface StudentDashboardProps {
   token: string;
+  lang: Language;
+  onChangeLang: (lang: Language) => void;
   onBackToSite: () => void;
   onLogout: () => void;
 }
 
 type DashboardSection = 'overview' | 'notices' | 'tuition' | 'routine' | 'results';
 
-const NAV_ITEMS: { id: DashboardSection; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'overview', label: 'সারসংক্ষেপ', icon: LayoutDashboard },
-  { id: 'notices', label: 'নোটিশ বোর্ড', icon: Bell },
-  { id: 'tuition', label: 'মাসিক বেতনের হিসাব', icon: CreditCard },
-  { id: 'routine', label: 'পরীক্ষার রুটিন', icon: CalendarDays },
-  { id: 'results', label: 'পরীক্ষার রেজাল্ট', icon: Award },
-];
-
 export function StudentDashboard({
   token,
+  lang,
+  onChangeLang,
   onBackToSite,
   onLogout,
 }: StudentDashboardProps) {
+  const copy = UI_COPY[lang];
+  const d = copy.dashboard;
+
   const [activeTab, setActiveTab] = useState<DashboardSection>('overview');
   const [payload, setPayload] = useState<StudentDashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payError, setPayError] = useState('');
-  const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
+  const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null);
   const [noticeFilter, setNoticeFilter] = useState<'সকল' | NoticeCategory>('সকল');
   const [selectedTermId, setSelectedTermId] = useState<string>('');
   const onLogoutRef = useRef(onLogout);
   onLogoutRef.current = onLogout;
+
+  const navItems: { id: DashboardSection; label: string; icon: typeof LayoutDashboard }[] = [
+    { id: 'overview', label: d.nav.overview, icon: LayoutDashboard },
+    { id: 'notices', label: d.nav.notices, icon: Bell },
+    { id: 'tuition', label: d.nav.tuition, icon: CreditCard },
+    { id: 'routine', label: d.nav.routine, icon: CalendarDays },
+    { id: 'results', label: d.nav.results, icon: Award },
+  ];
+
+  const allNotices: NoticeItem[] = useMemo(
+    () => (lang === 'en' ? NOTICES_EN : NOTICES),
+    [lang],
+  );
+
+  const selectedNotice = useMemo(
+    () => allNotices.find((n) => n.id === selectedNoticeId) ?? null,
+    [allNotices, selectedNoticeId],
+  );
 
   useEffect(() => {
     if (!selectedNotice) return;
@@ -74,7 +105,7 @@ export function StudentDashboard({
         }
         const data = (await res.json()) as StudentDashboardPayload & { error?: string };
         if (!res.ok) {
-          throw new Error(data.error ?? 'তথ্য লোড করা যায়নি।');
+          throw new Error(data.error ?? d.loadErrorTitle);
         }
         if (!cancelled) {
           setPayload(data);
@@ -84,7 +115,7 @@ export function StudentDashboard({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'ড্যাশবোর্ড লোড করতে সমস্যা হয়েছে।');
+          setError(err instanceof Error ? err.message : d.loadErrorTitle);
         }
       } finally {
         if (!cancelled) {
@@ -97,7 +128,7 @@ export function StudentDashboard({
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, d.loadErrorTitle]);
 
   const tuitionStats = useMemo(() => {
     const records = payload?.tuitionRecords ?? [];
@@ -115,10 +146,10 @@ export function StudentDashboard({
   const filteredNotices = useMemo(() => {
     const list =
       noticeFilter === 'সকল'
-        ? NOTICES
-        : NOTICES.filter((n) => n.category === noticeFilter);
+        ? allNotices
+        : allNotices.filter((n) => n.category === noticeFilter);
     return list.slice(0, MAX_NOTICES);
-  }, [noticeFilter]);
+  }, [allNotices, noticeFilter]);
 
   const activeResultTerm = useMemo(() => {
     if (!payload?.examResults.length) return null;
@@ -128,15 +159,15 @@ export function StudentDashboard({
   }, [payload, selectedTermId]);
 
   const termTotals = useMemo(() => {
-    if (!activeResultTerm) return { totalFull: 0, totalObtained: 0, percentage: '০' };
+    if (!activeResultTerm) return { totalFull: 0, totalObtained: 0, percentage: '0' };
     const totalFull = activeResultTerm.subjects.reduce((s, item) => s + item.fullMarks, 0);
     const totalObtained = activeResultTerm.subjects.reduce(
       (s, item) => s + item.obtainedMarks,
       0,
     );
     const pct = totalFull > 0 ? Math.round((totalObtained / totalFull) * 100) : 0;
-    return { totalFull, totalObtained, percentage: toBengaliDigits(pct) };
-  }, [activeResultTerm]);
+    return { totalFull, totalObtained, percentage: formatDigits(pct, lang) };
+  }, [activeResultTerm, lang]);
 
   const handlePayTuition = async (record: TuitionRecord) => {
     if (record.status === 'পরিশোধিত') return;
@@ -157,14 +188,14 @@ export function StudentDashboard({
       }
       const data = (await res.json()) as { tuitionRecords?: TuitionRecord[]; error?: string };
       if (!res.ok || !data.tuitionRecords) {
-        setPayError(data.error ?? 'বেতন পরিশোধ সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        setPayError(data.error ?? copy.auth.errNetwork);
         return;
       }
       setPayload((prev) =>
         prev ? { ...prev, tuitionRecords: data.tuitionRecords! } : prev,
       );
     } catch {
-      setPayError('সার্ভারের সাথে সংযোগ ব্যর্থ হয়েছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
+      setPayError(copy.auth.errNetwork);
     } finally {
       setPayingId(null);
     }
@@ -199,7 +230,7 @@ export function StudentDashboard({
         <div className="max-w-md rounded-xl border border-[#E2E8F0] bg-white p-8">
           <AlertCircle className="mx-auto h-10 w-10 text-red-600" />
           <h2 className="mt-4 font-serif text-xl font-bold text-[#0F172A]">
-            ড্যাশবোর্ড লোড করা যায়নি
+            {d.loadErrorTitle}
           </h2>
           <p className="mt-2 text-sm text-[#475569]">{error}</p>
           <div className="mt-6 flex items-center justify-center gap-3">
@@ -208,14 +239,14 @@ export function StudentDashboard({
               onClick={onBackToSite}
               className="rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-medium text-[#0F172A] hover:bg-[#F8FAFC]"
             >
-              মূল পেজে ফিরুন
+              {d.backHomeBtn}
             </button>
             <button
               type="button"
               onClick={onLogout}
               className="rounded-lg bg-[#065F46] px-4 py-2 text-sm font-medium text-white hover:bg-[#047857]"
             >
-              পুনরায় লগইন করুন
+              {d.reloginBtn}
             </button>
           </div>
         </div>
@@ -234,30 +265,31 @@ export function StudentDashboard({
             <GraduationCap className="h-6 w-6 shrink-0 text-[#065F46]" aria-hidden="true" />
             <div className="min-w-0">
               <p className="truncate font-serif text-sm font-bold text-[#0F172A] sm:text-base">
-                আল-জামিয়াতুল ইসলামিয়া · ছাত্র ড্যাশবোর্ড
+                {d.headerTitle}
               </p>
               <p className="truncate text-xs text-[#475569] tabular-nums">
-                {student.name} · আইডি: {student.studentRoll}
+                {student.name} · {d.idPrefix} {student.studentRoll}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <LanguageToggle lang={lang} onChange={onChangeLang} />
             <button
               type="button"
               onClick={onBackToSite}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-xs font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC] whitespace-nowrap shrink-0 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC] whitespace-nowrap shrink-0 sm:px-3.5 sm:text-sm"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span>মূল ওয়েবসাইট</span>
+              <span className="hidden sm:inline">{d.backToSite}</span>
             </button>
             <button
               type="button"
               onClick={onLogout}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#065F46] px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-[#047857] whitespace-nowrap shrink-0 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#065F46] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#047857] whitespace-nowrap shrink-0 sm:px-3.5 sm:text-sm"
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span>লগআউট</span>
+              <span>{d.logout}</span>
             </button>
           </div>
         </div>
@@ -265,22 +297,26 @@ export function StudentDashboard({
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          {/* Sidebar Navigation (Desktop) / Mobile Segmented Rail */}
+          {/* Sidebar Navigation */}
           <aside className="no-print lg:col-span-3">
             <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
               <div className="border-b border-[#E2E8F0] pb-4">
-                <p className="text-xs font-medium text-[#B45309]">{student.session}</p>
+                <p className="text-xs font-medium text-[#B45309]">
+                  {translatePortalValue(student.session, lang)}
+                </p>
                 <h1 className="mt-1 font-serif text-lg font-bold text-[#0F172A]">
                   {student.name}
                 </h1>
-                <p className="mt-0.5 text-xs text-[#475569]">{student.className}</p>
+                <p className="mt-0.5 text-xs text-[#475569]">
+                  {translatePortalValue(student.className, lang)}
+                </p>
                 <p className="mt-1 text-xs font-medium text-[#065F46] tabular-nums">
-                  মোবাইল: {toBengaliDigits(student.phone)}
+                  {d.mobilePrefix} {formatDigits(student.phone, lang)}
                 </p>
               </div>
 
-              <nav aria-label="ড্যাশবোর্ড মেনু" className="mt-4 flex flex-wrap gap-1.5 lg:flex-col">
-                {NAV_ITEMS.map((item) => {
+              <nav aria-label={d.headerTitle} className="mt-4 flex flex-wrap gap-1.5 lg:flex-col">
+                {navItems.map((item) => {
                   const Icon = item.icon;
                   const active = activeTab === item.id;
                   return (
@@ -310,40 +346,42 @@ export function StudentDashboard({
                 {/* 4 KPI Summary Cards */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
-                    <p className="text-xs text-[#475569]">মোট পরিশোধিত বেতন</p>
+                    <p className="text-xs text-[#475569]">{d.kpiPaid}</p>
                     <p className="mt-2 font-serif text-2xl font-bold text-[#065F46] tabular-nums">
-                      ৳ {toBengaliDigits(tuitionStats.totalPaid)}
+                      ৳ {formatDigits(tuitionStats.totalPaid, lang)}
                     </p>
                     <p className="mt-1 text-xs text-[#475569] tabular-nums">
-                      {toBengaliDigits(tuitionStats.paidMonths)} মাসের বেতন পরিশোধিত
+                      {d.kpiPaidSub(formatDigits(tuitionStats.paidMonths, lang))}
                     </p>
                   </div>
 
                   <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
-                    <p className="text-xs text-[#475569]">বর্তমান বকেয়া বেতন</p>
+                    <p className="text-xs text-[#475569]">{d.kpiDue}</p>
                     <p className="mt-2 font-serif text-2xl font-bold text-[#B45309] tabular-nums">
-                      ৳ {toBengaliDigits(tuitionStats.totalDue)}
+                      ৳ {formatDigits(tuitionStats.totalDue, lang)}
                     </p>
                     <p className="mt-1 text-xs text-[#475569] tabular-nums">
-                      {toBengaliDigits(tuitionStats.dueMonths)} মাস বকেয়া রয়েছে
+                      {d.kpiDueSub(formatDigits(tuitionStats.dueMonths, lang))}
                     </p>
                   </div>
 
                   <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
-                    <p className="text-xs text-[#475569]">আসন্ন পরীক্ষা</p>
+                    <p className="text-xs text-[#475569]">{d.kpiNextExam}</p>
                     <p className="mt-2 font-serif text-xl font-bold text-[#0F172A] tabular-nums">
-                      ২৫ নভেম্বর ২০২৬
+                      {d.kpiNextExamDate}
                     </p>
-                    <p className="mt-1 text-xs text-[#475569]">২য় সাময়িক পরীক্ষা</p>
+                    <p className="mt-1 text-xs text-[#475569]">{d.kpiNextExamSub}</p>
                   </div>
 
                   <div className="rounded-xl border border-[#E2E8F0] bg-white p-5">
-                    <p className="text-xs text-[#475569]">সর্বশেষ ফলাফল</p>
+                    <p className="text-xs text-[#475569]">{d.kpiLatestResult}</p>
                     <p className="mt-2 font-serif text-xl font-bold text-[#065F46]">
-                      {activeResultTerm?.overallGrade ?? 'মুমতায'}
+                      {translatePortalValue(activeResultTerm?.overallGrade ?? 'মুমতায', lang)}
                     </p>
                     <p className="mt-1 text-xs text-[#475569]">
-                      {activeResultTerm?.meritPosition}
+                      {activeResultTerm
+                        ? translatePortalValue(activeResultTerm.meritPosition, lang)
+                        : ''}
                     </p>
                   </div>
                 </div>
@@ -353,26 +391,30 @@ export function StudentDashboard({
                   <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
                     <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4">
                       <h2 className="font-serif text-lg font-bold text-[#0F172A]">
-                        সাম্প্রতিক নোটিশ
+                        {d.recentNotices}
                       </h2>
                       <button
                         type="button"
                         onClick={() => setActiveTab('notices')}
                         className="text-xs font-semibold text-[#065F46] hover:underline"
                       >
-                        সব দেখুন
+                        {d.viewAll}
                       </button>
                     </div>
                     <div className="mt-4 divide-y divide-[#E2E8F0]">
-                      {NOTICES.slice(0, 3).map((notice) => (
+                      {allNotices.slice(0, 3).map((notice) => (
                         <div key={notice.id} className="py-3 first:pt-0 last:pb-0">
                           <p className="text-xs text-[#475569] tabular-nums">
-                            <span className="font-semibold text-[#065F46]">{notice.category}</span> ·{' '}
-                            {notice.date}
+                            <span className="font-semibold text-[#065F46]">
+                              {lang === 'en'
+                                ? NOTICE_CATEGORY_EN[notice.category]
+                                : notice.category}
+                            </span>{' '}
+                            · {notice.date}
                           </p>
                           <button
                             type="button"
-                            onClick={() => setSelectedNotice(notice)}
+                            onClick={() => setSelectedNoticeId(notice.id)}
                             className="mt-1 text-left text-sm font-medium text-[#0F172A] hover:text-[#065F46]"
                           >
                             {notice.title}
@@ -385,23 +427,26 @@ export function StudentDashboard({
                   <div className="rounded-xl border border-[#E2E8F0] bg-white p-6">
                     <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4">
                       <h2 className="font-serif text-lg font-bold text-[#0F172A]">
-                        আসন্ন পরীক্ষার সময়সূচি
+                        {d.upcomingRoutine}
                       </h2>
                       <button
                         type="button"
                         onClick={() => setActiveTab('routine')}
                         className="text-xs font-semibold text-[#065F46] hover:underline"
                       >
-                        পূর্ণ রুটিন
+                        {d.fullRoutine}
                       </button>
                     </div>
                     <div className="mt-4 divide-y divide-[#E2E8F0]">
                       {payload.examRoutine.slice(0, 3).map((exam) => (
                         <div key={exam.id} className="py-3 first:pt-0 last:pb-0">
                           <p className="text-xs text-[#B45309] tabular-nums">
-                            {exam.date} · {exam.time}
+                            {translatePortalValue(exam.date, lang)} ·{' '}
+                            {translatePortalValue(exam.time, lang)}
                           </p>
-                          <p className="mt-1 text-sm font-medium text-[#0F172A]">{exam.subject}</p>
+                          <p className="mt-1 text-sm font-medium text-[#0F172A]">
+                            {translatePortalValue(exam.subject, lang)}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -415,26 +460,24 @@ export function StudentDashboard({
                 <div className="flex flex-col justify-between gap-4 border-b border-[#E2E8F0] pb-5 sm:flex-row sm:items-center">
                   <div>
                     <h2 className="font-serif text-xl font-bold text-[#0F172A]">
-                      শিক্ষার্থীদের নোটিশ বোর্ড
+                      {d.studentNoticeBoard}
                     </h2>
-                    <p className="mt-1 text-xs text-[#475569]">
-                      মাদ্রাসার সর্বশেষ বিজ্ঞপ্তি ও নির্দেশনাবলি
-                    </p>
+                    <p className="mt-1 text-xs text-[#475569]">{d.studentNoticeSub}</p>
                   </div>
 
                   <div className="inline-flex flex-wrap gap-1 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-1">
-                    {(['সকল', 'ভর্তি', 'পরীক্ষা', 'সাধারণ'] as const).map((cat) => (
+                    {copy.noticeFilters.map((tab) => (
                       <button
-                        key={cat}
+                        key={tab.id}
                         type="button"
-                        onClick={() => setNoticeFilter(cat)}
+                        onClick={() => setNoticeFilter(tab.id)}
                         className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                          noticeFilter === cat
+                          noticeFilter === tab.id
                             ? 'bg-[#065F46] text-white'
                             : 'text-[#475569] hover:text-[#0F172A]'
                         }`}
                       >
-                        {cat === 'সকল' ? 'সকল নোটিশ' : cat}
+                        {tab.label}
                       </button>
                     ))}
                   </div>
@@ -448,8 +491,12 @@ export function StudentDashboard({
                     >
                       <div>
                         <p className="text-xs text-[#475569] tabular-nums">
-                          <span className="font-semibold text-[#065F46]">{notice.category}</span> ·{' '}
-                          {notice.date} · {notice.refNumber}
+                          <span className="font-semibold text-[#065F46]">
+                            {lang === 'en'
+                              ? NOTICE_CATEGORY_EN[notice.category]
+                              : notice.category}
+                          </span>{' '}
+                          · {notice.date} · {notice.refNumber}
                         </p>
                         <h3 className="mt-1 font-serif text-base font-semibold text-[#0F172A]">
                           {notice.title}
@@ -458,11 +505,11 @@ export function StudentDashboard({
                       </div>
                       <button
                         type="button"
-                        onClick={() => setSelectedNotice(notice)}
+                        onClick={() => setSelectedNoticeId(notice.id)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-xs font-semibold text-[#065F46] hover:bg-[#F8FAFC] whitespace-nowrap shrink-0"
                       >
                         <FileText className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span>বিস্তারিত দেখুন</span>
+                        <span>{copy.noticeViewDetails}</span>
                       </button>
                     </div>
                   ))}
@@ -475,10 +522,10 @@ export function StudentDashboard({
                 <div className="flex flex-col justify-between gap-4 border-b border-[#E2E8F0] pb-5 sm:flex-row sm:items-center">
                   <div>
                     <h2 className="font-serif text-xl font-bold text-[#0F172A]">
-                      মাসিক বেতন ও ফি হিসাব বিবরণী
+                      {d.tuitionHeading}
                     </h2>
                     <p className="mt-1 text-xs text-[#475569] tabular-nums">
-                      শিক্ষার্থী: {student.name} · আইডি: {student.studentRoll}
+                      {student.name} · {d.idPrefix} {student.studentRoll}
                     </p>
                   </div>
                   <button
@@ -487,7 +534,7 @@ export function StudentDashboard({
                     className="no-print inline-flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-xs font-medium text-[#0F172A] hover:bg-[#F8FAFC] whitespace-nowrap shrink-0"
                   >
                     <Printer className="h-4 w-4 text-[#065F46]" aria-hidden="true" />
-                    <span>হিসাব প্রিন্ট করুন</span>
+                    <span>{d.tuitionPrint}</span>
                   </button>
                 </div>
 
@@ -502,15 +549,15 @@ export function StudentDashboard({
 
                 <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
-                    <span className="text-xs text-[#475569]">মোট পরিশোধিত:</span>
+                    <span className="text-xs text-[#475569]">{d.tuitionTotalPaid}</span>
                     <span className="ml-2 font-serif text-base font-bold text-[#065F46] tabular-nums">
-                      ৳ {toBengaliDigits(tuitionStats.totalPaid)}
+                      ৳ {formatDigits(tuitionStats.totalPaid, lang)}
                     </span>
                   </div>
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
-                    <span className="text-xs text-[#475569]">মোট বকেয়া:</span>
+                    <span className="text-xs text-[#475569]">{d.tuitionTotalDue}</span>
                     <span className="ml-2 font-serif text-base font-bold text-[#B45309] tabular-nums">
-                      ৳ {toBengaliDigits(tuitionStats.totalDue)}
+                      ৳ {formatDigits(tuitionStats.totalDue, lang)}
                     </span>
                   </div>
                 </div>
@@ -519,27 +566,29 @@ export function StudentDashboard({
                   <table className="w-full border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-[#E2E8F0] text-xs font-semibold text-[#475569]">
-                        <th className="py-3 pr-4">মাস</th>
-                        <th className="py-3 pr-4">খাতের বিবরণ</th>
-                        <th className="py-3 pr-4 text-right">পরিমাণ</th>
-                        <th className="py-3 pr-4">জমার তারিখ</th>
-                        <th className="py-3 pr-4">রশিদ নং</th>
-                        <th className="py-3 pr-4">অবস্থা</th>
-                        <th className="no-print py-3 text-right">কার্যক্রম</th>
+                        <th className="py-3 pr-4">{d.colMonth}</th>
+                        <th className="py-3 pr-4">{d.colFeeDesc}</th>
+                        <th className="py-3 pr-4 text-right">{d.colAmount}</th>
+                        <th className="py-3 pr-4">{d.colPaidDate}</th>
+                        <th className="py-3 pr-4">{d.colReceiptNo}</th>
+                        <th className="py-3 pr-4">{d.colStatus}</th>
+                        <th className="no-print py-3 text-right">{d.colAction}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E2E8F0]">
                       {payload.tuitionRecords.map((record) => (
                         <tr key={record.id} className="hover:bg-[#F8FAFC]/60">
                           <td className="py-3.5 pr-4 font-medium text-[#0F172A] whitespace-nowrap">
-                            {record.month}
+                            {translatePortalValue(record.month, lang)}
                           </td>
-                          <td className="py-3.5 pr-4 text-[#475569]">{record.feeType}</td>
+                          <td className="py-3.5 pr-4 text-[#475569]">
+                            {translatePortalValue(record.feeType, lang)}
+                          </td>
                           <td className="py-3.5 pr-4 text-right font-semibold text-[#0F172A] tabular-nums whitespace-nowrap">
-                            ৳ {toBengaliDigits(record.amount)}
+                            ৳ {formatDigits(record.amount, lang)}
                           </td>
                           <td className="py-3.5 pr-4 text-[#475569] tabular-nums whitespace-nowrap">
-                            {record.paidDate}
+                            {translatePortalValue(record.paidDate, lang)}
                           </td>
                           <td className="py-3.5 pr-4 font-mono text-xs text-[#475569] tabular-nums whitespace-nowrap">
                             {record.receiptNo}
@@ -548,12 +597,12 @@ export function StudentDashboard({
                             {record.status === 'পরিশোধিত' ? (
                               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#065F46]">
                                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                <span>পরিশোধিত</span>
+                                <span>{d.statusPaid}</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#B45309]">
                                 <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                                <span>বকেয়া</span>
+                                <span>{d.statusDue}</span>
                               </span>
                             )}
                           </td>
@@ -565,10 +614,10 @@ export function StudentDashboard({
                                 onClick={() => handlePayTuition(record)}
                                 className="rounded-md bg-[#065F46] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#047857] disabled:opacity-60"
                               >
-                                {payingId === record.id ? 'প্রক্রিয়াধীন...' : 'পরিশোধ করুন'}
+                                {payingId === record.id ? d.paying : d.payNow}
                               </button>
                             ) : (
-                              <span className="text-xs text-slate-400">সম্পন্ন</span>
+                              <span className="text-xs text-slate-400">{d.done}</span>
                             )}
                           </td>
                         </tr>
@@ -584,10 +633,11 @@ export function StudentDashboard({
                 <div className="flex flex-col justify-between gap-4 border-b border-[#E2E8F0] pb-5 sm:flex-row sm:items-center">
                   <div>
                     <h2 className="font-serif text-xl font-bold text-[#0F172A]">
-                      ২য় সাময়িক পরীক্ষার সময়সূচি (রুটিন)
+                      {d.routineHeading}
                     </h2>
                     <p className="mt-1 text-xs text-[#475569]">
-                      জামাত: {student.className} · শিক্ষাবর্ষ {student.session}
+                      {d.jamatPrefix} {translatePortalValue(student.className, lang)} ·{' '}
+                      {d.sessionPrefix} {translatePortalValue(student.session, lang)}
                     </p>
                   </div>
                   <button
@@ -596,7 +646,7 @@ export function StudentDashboard({
                     className="no-print inline-flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-4 py-2 text-xs font-medium text-[#0F172A] hover:bg-[#F8FAFC] whitespace-nowrap shrink-0"
                   >
                     <Printer className="h-4 w-4 text-[#065F46]" aria-hidden="true" />
-                    <span>রুটিন প্রিন্ট করুন</span>
+                    <span>{d.routinePrint}</span>
                   </button>
                 </div>
 
@@ -604,31 +654,35 @@ export function StudentDashboard({
                   <table className="w-full border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-[#E2E8F0] text-xs font-semibold text-[#475569]">
-                        <th className="py-3 pr-4">তারিখ ও বার</th>
-                        <th className="py-3 pr-4">সময়</th>
-                        <th className="py-3 pr-4">বিষয় / কিতাব</th>
-                        <th className="py-3 pr-4">কোড</th>
-                        <th className="py-3">কক্ষ ও আসন নং</th>
+                        <th className="py-3 pr-4">{d.colDateDay}</th>
+                        <th className="py-3 pr-4">{d.colTime}</th>
+                        <th className="py-3 pr-4">{d.colSubject}</th>
+                        <th className="py-3 pr-4">{d.colCode}</th>
+                        <th className="py-3">{d.colHallSeat}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E2E8F0]">
                       {payload.examRoutine.map((exam) => (
                         <tr key={exam.id} className="hover:bg-[#F8FAFC]/60">
                           <td className="py-3.5 pr-4 whitespace-nowrap">
-                            <p className="font-medium text-[#0F172A] tabular-nums">{exam.date}</p>
-                            <p className="text-xs text-[#475569]">{exam.day}</p>
+                            <p className="font-medium text-[#0F172A] tabular-nums">
+                              {translatePortalValue(exam.date, lang)}
+                            </p>
+                            <p className="text-xs text-[#475569]">
+                              {translatePortalValue(exam.day, lang)}
+                            </p>
                           </td>
                           <td className="py-3.5 pr-4 text-[#475569] tabular-nums whitespace-nowrap">
-                            {exam.time}
+                            {translatePortalValue(exam.time, lang)}
                           </td>
                           <td className="py-3.5 pr-4 font-semibold text-[#0F172A]">
-                            {exam.subject}
+                            {translatePortalValue(exam.subject, lang)}
                           </td>
                           <td className="py-3.5 pr-4 font-mono text-xs text-[#065F46] whitespace-nowrap">
                             {exam.kitabCode}
                           </td>
                           <td className="py-3.5 text-[#475569] whitespace-nowrap">
-                            {exam.hallAndSeat}
+                            {translatePortalValue(exam.hallAndSeat, lang)}
                           </td>
                         </tr>
                       ))}
@@ -643,23 +697,23 @@ export function StudentDashboard({
                 <div className="flex flex-col justify-between gap-4 border-b border-[#E2E8F0] pb-5 sm:flex-row sm:items-center">
                   <div>
                     <h2 className="font-serif text-xl font-bold text-[#0F172A]">
-                      পরীক্ষার ফলাফল ও নম্বরপত্র
+                      {d.resultsHeading}
                     </h2>
                     <p className="mt-1 text-xs text-[#475569] tabular-nums">
-                      শিক্ষার্থী: {student.name} · রোল: {student.studentRoll}
+                      {student.name} · {d.rollPrefix} {student.studentRoll}
                     </p>
                   </div>
 
                   <div className="no-print flex flex-wrap items-center gap-2">
                     <select
-                      aria-label="পরীক্ষার টার্ম নির্বাচন করুন"
+                      aria-label={d.selectTermAria}
                       value={activeResultTerm.id}
                       onChange={(e) => setSelectedTermId(e.target.value)}
                       className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-medium text-[#0F172A] focus:border-[#065F46] focus:outline-none"
                     >
                       {payload.examResults.map((term) => (
                         <option key={term.id} value={term.id}>
-                          {term.termName}
+                          {translatePortalValue(term.termName, lang)}
                         </option>
                       ))}
                     </select>
@@ -669,35 +723,35 @@ export function StudentDashboard({
                       className="inline-flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2 text-xs font-medium text-[#0F172A] hover:bg-[#F8FAFC] whitespace-nowrap"
                     >
                       <Printer className="h-4 w-4 text-[#065F46]" aria-hidden="true" />
-                      <span>প্রিন্ট</span>
+                      <span>{d.printShort}</span>
                     </button>
                   </div>
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3.5">
-                    <p className="text-xs text-[#475569]">মোট প্রাপ্ত নম্বর</p>
+                    <p className="text-xs text-[#475569]">{d.totalMarks}</p>
                     <p className="mt-1 font-serif text-lg font-bold text-[#065F46] tabular-nums">
-                      {toBengaliDigits(termTotals.totalObtained)} /{' '}
-                      {toBengaliDigits(termTotals.totalFull)}
+                      {formatDigits(termTotals.totalObtained, lang)} /{' '}
+                      {formatDigits(termTotals.totalFull, lang)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3.5">
-                    <p className="text-xs text-[#475569]">শতকরা হার</p>
+                    <p className="text-xs text-[#475569]">{d.percentageLabel}</p>
                     <p className="mt-1 font-serif text-lg font-bold text-[#0F172A] tabular-nums">
                       {termTotals.percentage}%
                     </p>
                   </div>
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3.5">
-                    <p className="text-xs text-[#475569]">সামগ্রিক বিভাগ</p>
+                    <p className="text-xs text-[#475569]">{d.overallGrade}</p>
                     <p className="mt-1 font-serif text-lg font-bold text-[#065F46]">
-                      {activeResultTerm.overallGrade}
+                      {translatePortalValue(activeResultTerm.overallGrade, lang)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3.5">
-                    <p className="text-xs text-[#475569]">মেধাস্থান</p>
+                    <p className="text-xs text-[#475569]">{d.meritPos}</p>
                     <p className="mt-1 font-serif text-base font-bold text-[#B45309]">
-                      {activeResultTerm.meritPosition}
+                      {translatePortalValue(activeResultTerm.meritPosition, lang)}
                     </p>
                   </div>
                 </div>
@@ -706,29 +760,31 @@ export function StudentDashboard({
                   <table className="w-full border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-[#E2E8F0] text-xs font-semibold text-[#475569]">
-                        <th className="py-3 pr-4">বিষয় / কিতাব</th>
-                        <th className="py-3 pr-4 text-right">পূর্ণমান</th>
-                        <th className="py-3 pr-4 text-right">প্রাপ্ত নম্বর</th>
-                        <th className="py-3 pr-4">গ্রেড / বিভাগ</th>
-                        <th className="py-3">মন্তব্য</th>
+                        <th className="py-3 pr-4">{d.colSubject}</th>
+                        <th className="py-3 pr-4 text-right">{d.colFullMarks}</th>
+                        <th className="py-3 pr-4 text-right">{d.colObtainedMarks}</th>
+                        <th className="py-3 pr-4">{d.colGrade}</th>
+                        <th className="py-3">{d.colRemarks}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E2E8F0]">
                       {activeResultTerm.subjects.map((subj) => (
                         <tr key={subj.subject} className="hover:bg-[#F8FAFC]/60">
                           <td className="py-3.5 pr-4 font-medium text-[#0F172A]">
-                            {subj.subject}
+                            {translatePortalValue(subj.subject, lang)}
                           </td>
                           <td className="py-3.5 pr-4 text-right text-[#475569] tabular-nums">
-                            {toBengaliDigits(subj.fullMarks)}
+                            {formatDigits(subj.fullMarks, lang)}
                           </td>
                           <td className="py-3.5 pr-4 text-right font-semibold text-[#0F172A] tabular-nums">
-                            {toBengaliDigits(subj.obtainedMarks)}
+                            {formatDigits(subj.obtainedMarks, lang)}
                           </td>
                           <td className="py-3.5 pr-4 font-semibold text-[#065F46]">
-                            {subj.grade}
+                            {translatePortalValue(subj.grade, lang)}
                           </td>
-                          <td className="py-3.5 text-[#475569]">{subj.remarks}</td>
+                          <td className="py-3.5 text-[#475569]">
+                            {translatePortalValue(subj.remarks, lang)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -736,7 +792,8 @@ export function StudentDashboard({
                 </div>
 
                 <p className="mt-4 text-xs text-[#475569]">
-                  ফলাফল প্রকাশের তারিখ: {activeResultTerm.publishedDate}
+                  {d.publishedDatePrefix}{' '}
+                  {translatePortalValue(activeResultTerm.publishedDate, lang)}
                 </p>
               </div>
             )}
@@ -744,7 +801,11 @@ export function StudentDashboard({
         </div>
       </div>
 
-      <NoticeModal notice={selectedNotice} onClose={() => setSelectedNotice(null)} />
+      <NoticeModal
+        notice={selectedNotice}
+        lang={lang}
+        onClose={() => setSelectedNoticeId(null)}
+      />
     </div>
   );
 }

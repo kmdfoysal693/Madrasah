@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { GalleryItem } from '../data/madrasaData';
+import {
+  GALLERY_CATEGORY_EN,
+  UI_COPY,
+  type Language,
+} from '../data/madrasaTranslations';
 
 interface GalleryLightboxModalProps {
   items: GalleryItem[];
   activeIndex: number | null;
+  lang: Language;
   onClose: () => void;
   onChangeIndex: (index: number) => void;
 }
@@ -12,10 +18,12 @@ interface GalleryLightboxModalProps {
 export function GalleryLightboxModal({
   items,
   activeIndex,
+  lang,
   onClose,
   onChangeIndex,
 }: GalleryLightboxModalProps) {
   const [imgFailed, setImgFailed] = useState(false);
+  const copy = UI_COPY[lang];
 
   useEffect(() => {
     setImgFailed(false);
@@ -38,6 +46,8 @@ export function GalleryLightboxModal({
 
   if (activeIndex === null || !items[activeIndex]) return null;
   const activeItem = items[activeIndex];
+  const categoryLabel =
+    lang === 'en' ? GALLERY_CATEGORY_EN[activeItem.category] : activeItem.category;
 
   return (
     <div
@@ -53,7 +63,7 @@ export function GalleryLightboxModal({
       >
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3.5">
           <div className="flex items-center gap-2 text-xs text-[#475569]">
-            <span className="font-semibold text-[#065F46]">{activeItem.category}</span>
+            <span className="font-semibold text-[#065F46]">{categoryLabel}</span>
             <span aria-hidden="true">·</span>
             <span>{activeItem.date}</span>
           </div>
@@ -61,7 +71,7 @@ export function GalleryLightboxModal({
             type="button"
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#475569] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-            aria-label="ছবি বন্ধ করুন"
+            aria-label={copy.lightboxClose}
           >
             <X className="h-5 w-5" />
           </button>
@@ -91,7 +101,7 @@ export function GalleryLightboxModal({
                   onChangeIndex((activeIndex - 1 + items.length) % items.length)
                 }
                 className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white/90 text-[#0F172A] shadow-sm transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-                aria-label="পূর্ববর্তী ছবি"
+                aria-label={copy.lightboxPrev}
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -99,7 +109,7 @@ export function GalleryLightboxModal({
                 type="button"
                 onClick={() => onChangeIndex((activeIndex + 1) % items.length)}
                 className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white/90 text-[#0F172A] shadow-sm transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
-                aria-label="পরবর্তী ছবি"
+                aria-label={copy.lightboxNext}
               >
                 <ChevronRight className="h-5 w-5" />
               </button>

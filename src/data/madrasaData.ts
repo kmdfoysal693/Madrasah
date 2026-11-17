@@ -39,8 +39,11 @@ export interface AdmissionSubmission {
   fatherName: string;
   dateOfBirth?: string;
   department: string;
+  departmentId?: string;
   className: string;
+  classIndex?: number;
   residentialType: ResidentialType;
+  residentialKey?: 'boarding' | 'non_residential' | 'day_care';
   mobile: string;
   address: string;
 }
