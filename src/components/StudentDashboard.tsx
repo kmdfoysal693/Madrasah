@@ -51,6 +51,15 @@ export function StudentDashboard({
   onLogoutRef.current = onLogout;
 
   useEffect(() => {
+    if (!selectedNotice) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [selectedNotice]);
+
+  useEffect(() => {
     let cancelled = false;
     async function fetchDashboard() {
       setLoading(true);

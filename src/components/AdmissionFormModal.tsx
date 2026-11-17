@@ -140,6 +140,7 @@ export function AdmissionFormModal({
     setErrors({});
     setStudentName('');
     setFatherName('');
+    setResidentialType('আবাসিক (বোর্ডিং)');
     setMobile('');
     setAddress('');
     onSubmitted(submission);
