@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Award, BookOpen, Briefcase, GraduationCap, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Award, BookOpen, Briefcase, GraduationCap, User, X } from 'lucide-react';
 import type { TeacherProfile } from '../data/madrasaData';
 
 interface TeacherProfileModalProps {
@@ -8,6 +8,12 @@ interface TeacherProfileModalProps {
 }
 
 export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [teacher?.id]);
+
   useEffect(() => {
     if (!teacher) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -23,14 +29,14 @@ export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[2px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="teacher-modal-title"
     >
       <div
-        className="relative my-8 w-full max-w-2xl overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xl"
+        className="relative mx-auto my-auto w-full max-w-2xl overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">
@@ -49,12 +55,20 @@ export function TeacherProfileModal({ teacher, onClose }: TeacherProfileModalPro
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-12">
             <div className="sm:col-span-5">
               <div className="aspect-[4/3] overflow-hidden rounded-xl border border-[#E2E8F0] bg-slate-100">
-                <img
-                  src={teacher.photoUrl}
-                  alt={teacher.name}
-                  referrerPolicy="no-referrer"
-                  className="h-full w-full object-cover object-top"
-                />
+                {!imgFailed ? (
+                  <img
+                    src={teacher.photoUrl}
+                    alt={teacher.name}
+                    referrerPolicy="no-referrer"
+                    onError={() => setImgFailed(true)}
+                    className="h-full w-full object-cover object-top"
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center bg-[#F8FAFC] p-6 text-center">
+                    <User className="h-10 w-10 text-[#065F46]" aria-hidden="true" />
+                    <p className="mt-2 text-xs text-[#475569]">{teacher.department}</p>
+                  </div>
+                )}
               </div>
             </div>
 

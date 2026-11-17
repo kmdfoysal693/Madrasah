@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { GalleryItem } from '../data/madrasaData';
 
 interface GalleryLightboxModalProps {
@@ -15,6 +15,12 @@ export function GalleryLightboxModal({
   onClose,
   onChangeIndex,
 }: GalleryLightboxModalProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [activeIndex]);
+
   useEffect(() => {
     if (activeIndex === null) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -35,14 +41,14 @@ export function GalleryLightboxModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-950/75 p-4 backdrop-blur-xs"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="lightbox-title"
     >
       <div
-        className="relative w-full max-w-4xl overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-2xl"
+        className="relative mx-auto my-auto w-full max-w-4xl overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3.5">
@@ -62,12 +68,20 @@ export function GalleryLightboxModal({
         </div>
 
         <div className="relative aspect-[4/3] w-full bg-slate-100 sm:aspect-[16/10]">
-          <img
-            src={activeItem.imageUrl}
-            alt={activeItem.title}
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover"
-          />
+          {!imgFailed ? (
+            <img
+              src={activeItem.imageUrl}
+              alt={activeItem.title}
+              referrerPolicy="no-referrer"
+              onError={() => setImgFailed(true)}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center bg-[#F8FAFC] p-6 text-center">
+              <BookOpen className="h-10 w-10 text-[#065F46]" aria-hidden="true" />
+              <p className="mt-2 text-sm text-[#475569]">{activeItem.title}</p>
+            </div>
+          )}
 
           {items.length > 1 && (
             <>

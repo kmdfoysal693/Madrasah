@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -43,9 +43,12 @@ export function StudentDashboard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [payError, setPayError] = useState('');
   const [selectedNotice, setSelectedNotice] = useState<NoticeItem | null>(null);
   const [noticeFilter, setNoticeFilter] = useState<'সকল' | NoticeCategory>('সকল');
   const [selectedTermId, setSelectedTermId] = useState<string>('');
+  const onLogoutRef = useRef(onLogout);
+  onLogoutRef.current = onLogout;
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +60,7 @@ export function StudentDashboard({
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.status === 401) {
-          onLogout();
+          onLogoutRef.current();
           return;
         }
         const data = (await res.json()) as StudentDashboardPayload & { error?: string };
@@ -85,7 +88,7 @@ export function StudentDashboard({
     return () => {
       cancelled = true;
     };
-  }, [token, onLogout]);
+  }, [token]);
 
   const tuitionStats = useMemo(() => {
     const records = payload?.tuitionRecords ?? [];
@@ -129,6 +132,7 @@ export function StudentDashboard({
   const handlePayTuition = async (record: TuitionRecord) => {
     if (record.status === 'পরিশোধিত') return;
     setPayingId(record.id);
+    setPayError('');
     try {
       const res = await fetch('/api/student/tuition/pay', {
         method: 'POST',
@@ -138,12 +142,20 @@ export function StudentDashboard({
         },
         body: JSON.stringify({ recordId: record.id }),
       });
-      const data = (await res.json()) as { tuitionRecords?: TuitionRecord[] };
-      if (res.ok && data.tuitionRecords) {
-        setPayload((prev) =>
-          prev ? { ...prev, tuitionRecords: data.tuitionRecords! } : prev,
-        );
+      if (res.status === 401) {
+        onLogoutRef.current();
+        return;
       }
+      const data = (await res.json()) as { tuitionRecords?: TuitionRecord[]; error?: string };
+      if (!res.ok || !data.tuitionRecords) {
+        setPayError(data.error ?? 'বেতন পরিশোধ সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        return;
+      }
+      setPayload((prev) =>
+        prev ? { ...prev, tuitionRecords: data.tuitionRecords! } : prev,
+      );
+    } catch {
+      setPayError('সার্ভারের সাথে সংযোগ ব্যর্থ হয়েছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
     } finally {
       setPayingId(null);
     }
@@ -469,6 +481,15 @@ export function StudentDashboard({
                     <span>হিসাব প্রিন্ট করুন</span>
                   </button>
                 </div>
+
+                {payError && (
+                  <div
+                    role="alert"
+                    className="no-print mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-700"
+                  >
+                    {payError}
+                  </div>
+                )}
 
                 <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">

@@ -462,6 +462,34 @@ export function toBengaliDigits(input: string | number): string {
   return String(input).replace(/\d/g, (digit) => BENGALI_DIGITS[Number(digit)] ?? digit);
 }
 
+const BENGALI_TO_ASCII_DIGITS: Record<string, string> = {
+  '০': '0',
+  '১': '1',
+  '২': '2',
+  '৩': '3',
+  '৪': '4',
+  '৫': '5',
+  '৬': '6',
+  '৭': '7',
+  '৮': '8',
+  '৯': '9',
+};
+
+export function normalizeMobileNumber(rawPhone: string): string {
+  const ascii = rawPhone.replace(/[০-৯]/g, (ch) => BENGALI_TO_ASCII_DIGITS[ch] ?? ch);
+  let cleaned = ascii.replace(/[\s()-]/g, '').trim();
+  if (cleaned.startsWith('+8801')) {
+    cleaned = cleaned.slice(3);
+  } else if (cleaned.startsWith('8801')) {
+    cleaned = cleaned.slice(2);
+  }
+  return cleaned;
+}
+
+export function isValidBdMobile(rawPhone: string): boolean {
+  return /^01[3-9]\d{8}$/.test(normalizeMobileNumber(rawPhone));
+}
+
 const BENGALI_WEEKDAYS = [
   'রবিবার',
   'সোমবার',

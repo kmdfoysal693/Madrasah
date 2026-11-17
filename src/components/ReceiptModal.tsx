@@ -35,14 +35,14 @@ export function ReceiptModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[2px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="receipt-modal-title"
     >
       <div
-        className="printable-area relative my-8 w-full max-w-2xl rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-xl sm:p-8"
+        className="printable-area relative mx-auto my-auto w-full max-w-2xl rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-xl sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="no-print flex items-center justify-between border-b border-[#E2E8F0] pb-4">

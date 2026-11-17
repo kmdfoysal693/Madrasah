@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -83,8 +83,28 @@ function writeDatabase(db: StudentDatabase) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
 }
 
+const BENGALI_TO_ASCII_DIGITS: Record<string, string> = {
+  '০': '0',
+  '১': '1',
+  '২': '2',
+  '৩': '3',
+  '৪': '4',
+  '৫': '5',
+  '৬': '6',
+  '৭': '7',
+  '৮': '8',
+  '৯': '9',
+};
+
 function normalizePhone(rawPhone: string): string {
-  return rawPhone.replace(/[\s-]/g, '').trim();
+  const ascii = rawPhone.replace(/[০-৯]/g, (ch) => BENGALI_TO_ASCII_DIGITS[ch] ?? ch);
+  let cleaned = ascii.replace(/[\s()-]/g, '').trim();
+  if (cleaned.startsWith('+8801')) {
+    cleaned = cleaned.slice(3);
+  } else if (cleaned.startsWith('8801')) {
+    cleaned = cleaned.slice(2);
+  }
+  return cleaned;
 }
 
 function hashPassword(password: string, salt?: string): { salt: string; hash: string } {
@@ -220,8 +240,8 @@ function buildInitialAcademicData(studentRoll: string): {
     },
     {
       id: 'ex-2',
-      date: '২৭ নভেম্বর ২০২৬',
-      day: 'শুক্রবার (বিকাল ব্যতীত — শনিবার)',
+      date: '২৮ নভেম্বর ২০২৬',
+      day: 'শনিবার',
       time: 'সকাল ৯:০০ – দুপুর ১২:০০',
       subject: 'মিশকাতুল মাসাবীহ (হাদিস শরীফ)',
       kitabCode: 'KIT-302',
@@ -229,8 +249,8 @@ function buildInitialAcademicData(studentRoll: string): {
     },
     {
       id: 'ex-3',
-      date: '২৯ নভেম্বর ২০২৬',
-      day: 'রবিবার',
+      date: '৩০ নভেম্বর ২০২৬',
+      day: 'সোমবার',
       time: 'সকাল ৯:০০ – দুপুর ১২:০০',
       subject: 'হিদায়া (ফিকহুল ইসলামী)',
       kitabCode: 'KIT-303',
@@ -238,8 +258,8 @@ function buildInitialAcademicData(studentRoll: string): {
     },
     {
       id: 'ex-4',
-      date: '০১ ডিসেম্বর ২০২৬',
-      day: 'মঙ্গলবার',
+      date: '০২ ডিসেম্বর ২০২৬',
+      day: 'বুধবার',
       time: 'সকাল ৯:০০ – দুপুর ১২:০০',
       subject: 'আরবি সাহিত্য ও বালাগাত',
       kitabCode: 'KIT-304',
@@ -247,8 +267,8 @@ function buildInitialAcademicData(studentRoll: string): {
     },
     {
       id: 'ex-5',
-      date: '০৩ ডিসেম্বর ২০২৬',
-      day: 'বৃহস্পতিবার',
+      date: '০৫ ডিসেম্বর ২০২৬',
+      day: 'শনিবার',
       time: 'সকাল ৯:০০ – দুপুর ১১:৩০',
       subject: 'ইংরেজি, গণিত ও তথ্যপ্রযুক্তি',
       kitabCode: 'GEN-305',
@@ -366,6 +386,13 @@ function getAuthenticatedStudent(req: Request): StoredStudentRecord | null {
 async function startServer() {
   const app = express();
   app.use(express.json());
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      res.status(400).json({ error: 'অনুরোধের তথ্য (JSON) সঠিক নয়।' });
+      return;
+    }
+    next(err);
+  });
 
   // 1. Register Student
   app.post('/api/auth/register', (req: Request, res: Response) => {
@@ -422,8 +449,12 @@ async function startServer() {
 
     const { salt, hash } = hashPassword(password);
     const id = crypto.randomUUID();
-    const rollSuffix = String(1000 + db.students.length + 1);
-    const studentRoll = `STD-1448-${rollSuffix}`;
+    const maxSuffix = db.students.reduce((max, s) => {
+      const match = s.studentRoll.match(/(\d+)$/);
+      const num = match ? Number(match[1]) : 1000;
+      return num > max ? num : max;
+    }, 1000);
+    const studentRoll = `STD-1448-${maxSuffix + 1}`;
     const academicData = buildInitialAcademicData(studentRoll);
 
     const newRecord: StoredStudentRecord = {
@@ -548,6 +579,10 @@ async function startServer() {
     }
 
     res.json({ tuitionRecords: db.students[studentIndex].tuitionRecords });
+  });
+
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'অনুরোধকৃত API পাওয়া যায়নি।' });
   });
 
   // Vite middleware in development / static build in production

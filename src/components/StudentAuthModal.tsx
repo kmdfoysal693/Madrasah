@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Eye, EyeOff, GraduationCap, Lock, Mail, Phone, User, X } from 'lucide-react';
 import type { StudentUser } from '../data/studentPortalData';
+import { isValidBdMobile, normalizeMobileNumber } from '../data/madrasaData';
 
 interface StudentAuthModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function StudentAuthModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    setErrorMsg('');
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
@@ -54,9 +56,9 @@ export function StudentAuthModal({
     event.preventDefault();
     setErrorMsg('');
 
-    const cleanPhone = loginPhone.replace(/[\s-]/g, '').trim();
-    if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
-      setErrorMsg('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)।');
+    const cleanPhone = normalizeMobileNumber(loginPhone);
+    if (!isValidBdMobile(cleanPhone)) {
+      setErrorMsg('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।');
       return;
     }
     if (!loginPassword) {
@@ -93,7 +95,7 @@ export function StudentAuthModal({
     event.preventDefault();
     setErrorMsg('');
 
-    const cleanPhone = regPhone.replace(/[\s-]/g, '').trim();
+    const cleanPhone = normalizeMobileNumber(regPhone);
     const cleanEmail = regEmail.trim().toLowerCase();
 
     if (regName.trim().length < 2) {
@@ -104,8 +106,8 @@ export function StudentAuthModal({
       setErrorMsg('সঠিক ইমেইল ঠিকানা প্রদান করুন।');
       return;
     }
-    if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
-      setErrorMsg('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)।');
+    if (!isValidBdMobile(cleanPhone)) {
+      setErrorMsg('সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।');
       return;
     }
     if (regPassword.length < 6) {
@@ -151,14 +153,14 @@ export function StudentAuthModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-[2px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="student-auth-title"
     >
       <div
-        className="relative my-8 w-full max-w-md overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xl"
+        className="relative mx-auto my-auto w-full max-w-md overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-6 py-4">

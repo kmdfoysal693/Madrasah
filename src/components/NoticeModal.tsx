@@ -27,14 +27,14 @@ export function NoticeModal({ notice, onClose }: NoticeModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-[2px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="notice-modal-title"
     >
       <div
-        className="printable-area relative w-full max-w-2xl rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-xl sm:p-8"
+        className="printable-area relative mx-auto my-auto w-full max-w-2xl rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-xl sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="no-print flex items-start justify-between gap-4 border-b border-[#E2E8F0] pb-4">

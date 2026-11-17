@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowRight,
   BookOpen,
@@ -31,6 +31,8 @@ import {
   TEACHERS,
   generateTrackingId,
   getFormattedDates,
+  isValidBdMobile,
+  normalizeMobileNumber,
   toBengaliDigits,
   type AdmissionSubmission,
   type NoticeCategory,
@@ -98,10 +100,15 @@ export default function App() {
   });
   const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
+  const skipNextMeFetchRef = useRef(false);
 
   useEffect(() => {
     if (!studentToken) {
       setCurrentStudent(null);
+      return;
+    }
+    if (skipNextMeFetchRef.current) {
+      skipNextMeFetchRef.current = false;
       return;
     }
     let cancelled = false;
@@ -137,13 +144,14 @@ export default function App() {
     } catch {
       // ignore storage errors
     }
+    skipNextMeFetchRef.current = true;
     setStudentToken(token);
     setCurrentStudent(student);
     setAuthModalOpen(false);
     setShowDashboard(true);
   };
 
-  const handleStudentLogout = () => {
+  const handleStudentLogout = useCallback(() => {
     try {
       localStorage.removeItem('madrasa_student_token');
     } catch {
@@ -152,7 +160,7 @@ export default function App() {
     setStudentToken(null);
     setCurrentStudent(null);
     setShowDashboard(false);
-  };
+  }, []);
 
   // Online Admission Form & Modal State
   const [admissionModalOpen, setAdmissionModalOpen] = useState(false);
@@ -178,6 +186,23 @@ export default function App() {
     setAdmissionInitialDept(deptName ?? DEPARTMENTS[0].name);
     setAdmissionModalOpen(true);
   };
+
+  const isAnyModalOpen =
+    Boolean(selectedNotice) ||
+    receiptModalOpen ||
+    lightboxIndex !== null ||
+    Boolean(selectedTeacher) ||
+    authModalOpen ||
+    admissionModalOpen;
+
+  useEffect(() => {
+    if (!isAnyModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isAnyModalOpen]);
 
   const { weekday, gregorian, hijri } = useMemo(() => getFormattedDates(), []);
 
@@ -217,11 +242,11 @@ export default function App() {
     if (!department) {
       nextErrors.department = 'অনুগ্রহ করে একটি বিভাগ নির্বাচন করুন।';
     }
-    const cleanMobile = mobile.replace(/[\s-]/g, '');
-    if (!/^01[3-9]\d{8}$/.test(cleanMobile)) {
-      nextErrors.mobile = 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)।';
+    const cleanMobile = normalizeMobileNumber(mobile);
+    if (!isValidBdMobile(cleanMobile)) {
+      nextErrors.mobile = 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।';
     }
-    if (!address.trim() || address.trim().length < 5) {
+    if (!address.trim() || address.trim().length < 4) {
       nextErrors.address = 'অনুগ্রহ করে পূর্ণ বর্তমান ঠিকানা লিখুন।';
     }
     return nextErrors;
@@ -259,7 +284,7 @@ export default function App() {
       department,
       className,
       residentialType,
-      mobile: mobile.replace(/[\s-]/g, ''),
+      mobile: normalizeMobileNumber(mobile),
       address: address.trim(),
     };
 
@@ -619,7 +644,7 @@ export default function App() {
         {/* 4. About & Principal's Message (মুহতামিমের বাণী) */}
         <section
           id="about"
-          className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
+          className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
         >
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-14">
@@ -717,7 +742,7 @@ export default function App() {
         </section>
 
         {/* 5. Academic Departments (বিভাগসমূহ) */}
-        <section id="departments" className="bg-white py-20 lg:py-24">
+        <section id="departments" className="scroll-mt-16 bg-white py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-medium text-[#B45309]">শিক্ষাক্রম ও বিভাগসমূহ</p>
@@ -786,7 +811,7 @@ export default function App() {
         {/* 6. Interactive Notice Board (নোটিশ বোর্ড) */}
         <section
           id="notices"
-          className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
+          className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24"
         >
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center gap-6 text-center">
@@ -870,7 +895,7 @@ export default function App() {
         </section>
 
         {/* 6.5. Photo Gallery (ফটো গ্যালারি) */}
-        <section id="gallery" className="bg-white py-20 lg:py-24">
+        <section id="gallery" className="scroll-mt-16 bg-white py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-medium text-[#B45309]">ক্যাম্পাস ও শিক্ষাঙ্গনের স্থিরচিত্র</p>
@@ -933,7 +958,7 @@ export default function App() {
         </section>
 
         {/* 7. Teachers & Faculty (আমাদের শিক্ষকমণ্ডলী) */}
-        <section id="teachers" className="border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24">
+        <section id="teachers" className="scroll-mt-16 border-y border-[#E2E8F0] bg-[#F8FAFC] py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-medium text-[#B45309]">অভিজ্ঞ ও নিবেদিতপ্রাণ উস্তাদবৃন্দ</p>
@@ -1031,7 +1056,7 @@ export default function App() {
         </section>
 
         {/* 8. Admission Process & Interactive Online Form */}
-        <section id="admission" className="bg-white py-20 lg:py-24">
+        <section id="admission" className="scroll-mt-16 bg-white py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-medium text-[#B45309]">ভর্তি নির্দেশিকা · ১৪৪৭–৪৮ হিজরি</p>
@@ -1377,7 +1402,7 @@ export default function App() {
       </main>
 
       {/* 8. Clean Minimal 4-Column Footer */}
-      <footer id="contact" className="no-print border-t border-[#E2E8F0] bg-[#F8FAFC] pt-16 pb-10">
+      <footer id="contact" className="no-print scroll-mt-16 border-t border-[#E2E8F0] bg-[#F8FAFC] pt-16 pb-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             {/* Column 1: Madrasa Info */}

@@ -4,6 +4,8 @@ import {
   DEPARTMENTS,
   RESIDENTIAL_TYPES,
   generateTrackingId,
+  isValidBdMobile,
+  normalizeMobileNumber,
   toBengaliDigits,
   type AdmissionSubmission,
   type ResidentialType,
@@ -47,12 +49,13 @@ export function AdmissionFormModal({
   }, [department]);
 
   useEffect(() => {
-    if (initialDepartment) {
-      setDepartment(initialDepartment);
-      const matched = DEPARTMENTS.find((d) => d.name === initialDepartment);
-      if (matched && matched.classes.length > 0) {
-        setClassName(matched.classes[0]);
-      }
+    if (!isOpen) return;
+    setErrors({});
+    const targetDept = initialDepartment || DEPARTMENTS[0].name;
+    setDepartment(targetDept);
+    const matched = DEPARTMENTS.find((d) => d.name === targetDept);
+    if (matched && matched.classes.length > 0) {
+      setClassName(matched.classes[0]);
     }
   }, [initialDepartment, isOpen]);
 
@@ -96,9 +99,9 @@ export function AdmissionFormModal({
     if (!className) {
       nextErrors.className = 'ক্লাস / জামাত নির্বাচন করুন।';
     }
-    const cleanMobile = mobile.replace(/[\s-]/g, '').trim();
-    if (!/^01[3-9]\d{8}$/.test(cleanMobile)) {
-      nextErrors.mobile = 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)।';
+    const cleanMobile = normalizeMobileNumber(mobile);
+    if (!isValidBdMobile(cleanMobile)) {
+      nextErrors.mobile = 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: ০১৭XXXXXXXX)।';
     }
     if (!address.trim() || address.trim().length < 4) {
       nextErrors.address = 'অনুগ্রহ করে বর্তমান ঠিকানা লিখুন।';
@@ -144,14 +147,14 @@ export function AdmissionFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/55 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-950/55 p-4 backdrop-blur-[2px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="admission-popup-title"
     >
       <div
-        className="relative my-6 w-full max-w-lg rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-2xl sm:p-8"
+        className="relative mx-auto my-auto w-full max-w-lg rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-2xl sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -337,7 +340,7 @@ export function AdmissionFormModal({
                   setMobile(e.target.value);
                   if (errors.mobile) setErrors((p) => ({ ...p, mobile: undefined }));
                 }}
-                placeholder="01XXXXXXXXX"
+                placeholder="০১৭XXXXXXXX"
                 className={`mt-1.5 w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 ${
                   errors.mobile
                     ? 'border-red-600 focus:ring-red-600/20'
