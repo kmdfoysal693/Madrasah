@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
+  Archive,
   ArrowRight,
   BookOpen,
   Building2,
@@ -23,39 +24,30 @@ import {
 } from 'lucide-react';
 import {
   ADMISSION_STEPS,
-  CORE_VALUES,
-  DEPARTMENTS,
-  INITIAL_GALLERY_ITEMS,
-  MAX_GALLERY_PHOTOS,
-  MAX_NOTICES,
-  NOTICES,
-  STATS,
-  TEACHERS,
   generateTrackingId,
   isValidBdMobile,
   normalizeMobileNumber,
   toBengaliDigits,
   type AdmissionSubmission,
+  type Department,
+  type GalleryItem,
   type NoticeCategory,
+  type NoticeItem,
+  type TeacherProfile,
 } from './data/madrasaData';
 import {
   ADMISSION_STEPS_EN,
-  CORE_VALUES_EN,
-  DEPARTMENTS_EN,
   GALLERY_CATEGORY_EN,
-  GALLERY_ITEMS_EN,
-  HERO_SLIDES,
   NOTICE_CATEGORY_EN,
-  NOTICES_EN,
   RESIDENTIAL_OPTIONS,
-  STATS_EN,
-  TEACHERS_EN,
   UI_COPY,
   formatDigits,
   getLocalizedFormattedDates,
   type Language,
   type ResidentialKey,
 } from './data/madrasaTranslations';
+import type { SiteCmsData } from './data/cmsTypes';
+import { DEFAULT_CMS_DATA } from './data/defaultCmsSeed';
 import type { StudentUser } from './data/studentPortalData';
 import { NoticeModal } from './components/NoticeModal';
 import { ReceiptModal } from './components/ReceiptModal';
@@ -87,6 +79,31 @@ export default function App() {
     }
   });
 
+  const [cmsData, setCmsData] = useState<SiteCmsData>(DEFAULT_CMS_DATA);
+
+  const copy = UI_COPY[lang];
+  const siteSettings = cmsData.siteSettings;
+  const heroCms = cmsData.heroSection;
+  const aboutCms = cmsData.aboutSection;
+
+  const activeBrandShort =
+    lang === 'en'
+      ? siteSettings.brandShortEn || copy.brandShort
+      : siteSettings.brandShortBn || copy.brandShort;
+  const activeBrandFull =
+    lang === 'en'
+      ? siteSettings.brandFullEn || copy.brandFull
+      : siteSettings.brandFullBn || copy.brandFull;
+  const activePhoneDisplay =
+    lang === 'en'
+      ? siteSettings.phoneEn || copy.phoneDisplay
+      : siteSettings.phoneBn || copy.phoneDisplay;
+  const activeEmail = siteSettings.email || 'info@aljamiatul-madrasa.edu.bd';
+  const activeAddress =
+    lang === 'en'
+      ? siteSettings.addressEn || copy.footerAddress
+      : siteSettings.addressBn || copy.footerAddress;
+
   useEffect(() => {
     try {
       localStorage.setItem('madrasa_lang', lang);
@@ -94,24 +111,189 @@ export default function App() {
       // ignore storage errors
     }
     document.documentElement.lang = lang;
-    document.title = UI_COPY[lang].pageTitle;
-  }, [lang]);
+    document.title =
+      lang === 'en'
+        ? `${activeBrandFull} — Official Website`
+        : `${activeBrandFull} — অফিসিয়াল ওয়েবসাইট`;
+  }, [lang, activeBrandFull]);
 
-  const copy = UI_COPY[lang];
-  const activeStats = lang === 'en' ? STATS_EN : STATS;
-  const activeCoreValues = lang === 'en' ? CORE_VALUES_EN : CORE_VALUES;
-  const activeDepartments = lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS;
-  const activeNotices = lang === 'en' ? NOTICES_EN : NOTICES;
-  const activeGalleryItems = lang === 'en' ? GALLERY_ITEMS_EN : INITIAL_GALLERY_ITEMS;
-  const activeTeachers = lang === 'en' ? TEACHERS_EN : TEACHERS;
+  const fetchLatestCms = useCallback(async () => {
+    try {
+      const res = await fetch('/api/cms', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { cms?: SiteCmsData };
+      if (data.cms) {
+        setCmsData(data.cms);
+      }
+    } catch {
+      // Fallback smoothly to current/default CMS data if offline
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchLatestCms();
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchLatestCms();
+      }
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'madrasa_cms_updated_at') {
+        void fetchLatestCms();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+    window.addEventListener('storage', handleStorage);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        channel = new BroadcastChannel('madrasa_cms_sync');
+        channel.onmessage = () => {
+          void fetchLatestCms();
+        };
+      }
+    } catch {
+      channel = null;
+    }
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      window.removeEventListener('storage', handleStorage);
+      if (channel) {
+        channel.close();
+      }
+    };
+  }, [fetchLatestCms]);
+
+  const activeHeroSlides = useMemo(
+    () =>
+      heroCms.slides.length > 0 ? heroCms.slides : DEFAULT_CMS_DATA.heroSection.slides,
+    [heroCms.slides],
+  );
+
+  const activeStats = useMemo(
+    () =>
+      heroCms.stats.map((s) => ({
+        value: lang === 'en' ? s.valueEn : s.valueBn,
+        label: lang === 'en' ? s.labelEn : s.labelBn,
+      })),
+    [heroCms.stats, lang],
+  );
+
+  const activeCoreValues = useMemo(
+    () =>
+      aboutCms.coreValues.map((cv) => ({
+        number: lang === 'en' ? cv.numberEn : cv.numberBn,
+        title: lang === 'en' ? cv.titleEn : cv.titleBn,
+        description: lang === 'en' ? cv.descriptionEn : cv.descriptionBn,
+      })),
+    [aboutCms.coreValues, lang],
+  );
+
+  const bnDepartments: Department[] = useMemo(
+    () =>
+      cmsData.departments.map((d) => ({
+        id: d.id,
+        code: d.codeBn,
+        name: d.nameBn,
+        subtitle: d.subtitleBn,
+        duration: d.durationBn,
+        ageGroup: d.ageGroupBn,
+        description: d.descriptionBn,
+        highlights: d.highlightsBn,
+        classes: d.classesBn,
+      })),
+    [cmsData.departments],
+  );
+
+  const enDepartments: Department[] = useMemo(
+    () =>
+      cmsData.departments.map((d) => ({
+        id: d.id,
+        code: d.codeEn,
+        name: d.nameEn,
+        subtitle: d.subtitleEn,
+        duration: d.durationEn,
+        ageGroup: d.ageGroupEn,
+        description: d.descriptionEn,
+        highlights: d.highlightsEn,
+        classes: d.classesEn,
+      })),
+    [cmsData.departments],
+  );
+
+  const activeDepartments = lang === 'en' ? enDepartments : bnDepartments;
+
+  const allMappedNotices = useMemo(
+    () =>
+      cmsData.notices.map((n) => ({
+        id: n.id,
+        status: n.status,
+        category: n.category,
+        date: lang === 'en' ? n.dateEn : n.dateBn,
+        hijriDate: lang === 'en' ? n.hijriDateEn : n.hijriDateBn,
+        refNumber: n.refNumber,
+        title: lang === 'en' ? n.titleEn : n.titleBn,
+        summary: lang === 'en' ? n.summaryEn : n.summaryBn,
+        fullText: lang === 'en' ? n.fullTextEn : n.fullTextBn,
+        issuedBy: lang === 'en' ? n.issuedByEn : n.issuedByBn,
+      })),
+    [cmsData.notices, lang],
+  );
+
+  const activeNotices: NoticeItem[] = useMemo(
+    () => allMappedNotices.filter((n) => n.status !== 'archived'),
+    [allMappedNotices],
+  );
+
+  const archivedNotices: NoticeItem[] = useMemo(
+    () => allMappedNotices.filter((n) => n.status === 'archived'),
+    [allMappedNotices],
+  );
+
+  const activeGalleryItems: GalleryItem[] = useMemo(
+    () =>
+      cmsData.gallery.map((g) => ({
+        id: g.id,
+        title: lang === 'en' ? g.titleEn : g.titleBn,
+        category: g.category,
+        date: lang === 'en' ? g.dateEn : g.dateBn,
+        imageUrl: g.imageUrl,
+      })),
+    [cmsData.gallery, lang],
+  );
+
+  const activeTeachers: TeacherProfile[] = useMemo(
+    () =>
+      cmsData.teachers.map((t) => ({
+        id: t.id,
+        name: lang === 'en' ? t.nameEn : t.nameBn,
+        designation: lang === 'en' ? t.designationEn : t.designationBn,
+        department: lang === 'en' ? t.departmentEn : t.departmentBn,
+        qualification: lang === 'en' ? t.qualificationEn : t.qualificationBn,
+        experience: lang === 'en' ? t.experienceEn : t.experienceBn,
+        subjects: lang === 'en' ? t.subjectsEn : t.subjectsBn,
+        bio: lang === 'en' ? t.bioEn : t.bioBn,
+        photoUrl: t.photoUrl,
+      })),
+    [cmsData.teachers, lang],
+  );
+
   const activeAdmissionSteps = lang === 'en' ? ADMISSION_STEPS_EN : ADMISSION_STEPS;
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [noticeFilter, setNoticeFilter] = useState<NoticeFilter>('সকল');
+  const [noticeArchiveMode, setNoticeArchiveMode] = useState<'active' | 'archived'>('active');
   const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null);
   const [activeHeroSlide, setActiveHeroSlide] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
   const [failedHeroSlides, setFailedHeroSlides] = useState<Record<string, boolean>>({});
+  const [logoImgFailed, setLogoImgFailed] = useState(false);
   const [libraryImgFailed, setLibraryImgFailed] = useState(false);
   const [muhtamimImgFailed, setMuhtamimImgFailed] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -131,9 +313,31 @@ export default function App() {
   const [showDashboard, setShowDashboard] = useState(false);
   const skipNextMeFetchRef = useRef(false);
 
+  useEffect(() => {
+    setLogoImgFailed(false);
+  }, [siteSettings.logoUrl]);
+
+  useEffect(() => {
+    setLibraryImgFailed(false);
+  }, [aboutCms.libraryPhotoUrl]);
+
+  useEffect(() => {
+    setMuhtamimImgFailed(false);
+  }, [aboutCms.muhtamimPhotoUrl]);
+
+  useEffect(() => {
+    setFailedHeroSlides({});
+  }, [activeHeroSlides]);
+
+  useEffect(() => {
+    if (noticeArchiveMode === 'archived' && archivedNotices.length === 0) {
+      setNoticeArchiveMode('active');
+    }
+  }, [noticeArchiveMode, archivedNotices.length]);
+
   const selectedNotice = useMemo(
-    () => activeNotices.find((n) => n.id === selectedNoticeId) ?? null,
-    [activeNotices, selectedNoticeId],
+    () => allMappedNotices.find((n) => n.id === selectedNoticeId) ?? null,
+    [allMappedNotices, selectedNoticeId],
   );
   const selectedTeacher = useMemo(
     () => activeTeachers.find((t) => t.id === selectedTeacherId) ?? null,
@@ -200,20 +404,32 @@ export default function App() {
     setShowDashboard(false);
   }, []);
 
+
   // Online Admission Form & Modal State
+  const defaultDeptId = activeDepartments[0]?.id ?? DEFAULT_CMS_DATA.departments[0].id;
   const [admissionModalOpen, setAdmissionModalOpen] = useState(false);
-  const [admissionInitialDeptId, setAdmissionInitialDeptId] = useState<string>(DEPARTMENTS[0].id);
+  const [admissionInitialDeptId, setAdmissionInitialDeptId] = useState<string>(defaultDeptId);
   const [studentName, setStudentName] = useState('');
   const [fatherName, setFatherName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [departmentId, setDepartmentId] = useState(DEPARTMENTS[0].id);
+  const [departmentId, setDepartmentId] = useState(defaultDeptId);
   const [classIndex, setClassIndex] = useState(0);
   const [residentialKey, setResidentialKey] = useState<ResidentialKey>('boarding');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
+  const [inlineSubmitting, setInlineSubmitting] = useState(false);
+  const [inlineSubmitError, setInlineSubmitError] = useState('');
   const [latestSubmission, setLatestSubmission] = useState<AdmissionSubmission | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeDepartments.length === 0) return;
+    if (!activeDepartments.some((d) => d.id === departmentId)) {
+      setDepartmentId(activeDepartments[0].id);
+      setClassIndex(0);
+    }
+  }, [activeDepartments, departmentId]);
 
   const selectedInlineDept = useMemo(
     () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
@@ -221,7 +437,7 @@ export default function App() {
   );
 
   const openAdmissionPopup = (deptId?: string) => {
-    setAdmissionInitialDeptId(deptId ?? DEPARTMENTS[0].id);
+    setAdmissionInitialDeptId(deptId ?? defaultDeptId);
     setAdmissionModalOpen(true);
   };
 
@@ -250,17 +466,18 @@ export default function App() {
     if (prefersReduced) return;
 
     const timer = window.setInterval(() => {
-      setActiveHeroSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+      setActiveHeroSlide((prev) => (prev + 1) % activeHeroSlides.length);
     }, 5500);
     return () => window.clearInterval(timer);
-  }, [heroPaused, isAnyModalOpen, showDashboard]);
+  }, [heroPaused, isAnyModalOpen, showDashboard, activeHeroSlides.length]);
 
-  const currentHeroSlide = HERO_SLIDES[activeHeroSlide] ?? HERO_SLIDES[0];
+  const safeHeroIndex = activeHeroSlide % activeHeroSlides.length;
+  const currentHeroSlide = activeHeroSlides[safeHeroIndex] ?? activeHeroSlides[0];
   const goToPrevHeroSlide = () => {
-    setActiveHeroSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+    setActiveHeroSlide((prev) => (prev - 1 + activeHeroSlides.length) % activeHeroSlides.length);
   };
   const goToNextHeroSlide = () => {
-    setActiveHeroSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+    setActiveHeroSlide((prev) => (prev + 1) % activeHeroSlides.length);
   };
 
   const { weekday, gregorian, hijri } = useMemo(
@@ -268,18 +485,18 @@ export default function App() {
     [lang],
   );
 
-  const filteredNotices = useMemo(() => {
-    const list =
-      noticeFilter === 'সকল'
-        ? activeNotices
-        : activeNotices.filter((item) => item.category === noticeFilter);
-    return list.slice(0, MAX_NOTICES);
-  }, [activeNotices, noticeFilter]);
-
-  const galleryItems = useMemo(
-    () => activeGalleryItems.slice(0, MAX_GALLERY_PHOTOS),
-    [activeGalleryItems],
+  const displayedNoticesPool = useMemo(
+    () => (noticeArchiveMode === 'archived' && archivedNotices.length > 0 ? archivedNotices : activeNotices),
+    [noticeArchiveMode, archivedNotices, activeNotices],
   );
+
+  const filteredNotices = useMemo(() => {
+    return noticeFilter === 'সকল'
+      ? displayedNoticesPool
+      : displayedNoticesPool.filter((item) => item.category === noticeFilter);
+  }, [displayedNoticesPool, noticeFilter]);
+
+  const galleryItems = activeGalleryItems;
 
   const visibleTeachers = useMemo(
     () => (showAllTeachers ? activeTeachers : activeTeachers.slice(0, 3)),
@@ -314,8 +531,9 @@ export default function App() {
     return nextErrors;
   };
 
-  const handleAdmissionSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleAdmissionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setInlineSubmitError('');
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
@@ -340,7 +558,13 @@ export default function App() {
           : toBengaliDigits(now.toLocaleString('en-GB'));
     }
 
-    const bnDept = DEPARTMENTS.find((d) => d.id === selectedInlineDept.id) ?? DEPARTMENTS[0];
+    const bnDept =
+      bnDepartments.find((d) => d.id === selectedInlineDept?.id) ??
+      bnDepartments[0] ?? {
+        id: 'dept',
+        name: selectedInlineDept?.name ?? '',
+        classes: selectedInlineDept?.classes ?? [],
+      };
     const resObj =
       RESIDENTIAL_OPTIONS.find((r) => r.key === residentialKey) ?? RESIDENTIAL_OPTIONS[0];
 
@@ -351,8 +575,8 @@ export default function App() {
       fatherName: fatherName.trim(),
       dateOfBirth,
       department: bnDept.name,
-      departmentId: selectedInlineDept.id,
-      className: bnDept.classes[classIndex] ?? bnDept.classes[0],
+      departmentId: selectedInlineDept?.id ?? bnDept.id,
+      className: bnDept.classes[classIndex] ?? bnDept.classes[0] ?? '',
       classIndex,
       residentialType: resObj.bn,
       residentialKey,
@@ -360,8 +584,34 @@ export default function App() {
       address: address.trim(),
     };
 
-    setLatestSubmission(submission);
-    setReceiptModalOpen(true);
+    setInlineSubmitting(true);
+    try {
+      const response = await fetch('/api/admissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission),
+      });
+      if (!response.ok) {
+        const errData = (await response.json().catch(() => ({}))) as { error?: string };
+        setInlineSubmitError(
+          errData.error ??
+            (lang === 'en'
+              ? 'Failed to save admission application. Please try again.'
+              : 'ভর্তি আবেদন সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'),
+        );
+        return;
+      }
+      setLatestSubmission(submission);
+      setReceiptModalOpen(true);
+    } catch {
+      setInlineSubmitError(
+        lang === 'en'
+          ? 'Network error while saving admission application.'
+          : 'সার্ভারের সাথে সংযোগ করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
+      );
+    } finally {
+      setInlineSubmitting(false);
+    }
   };
 
   const handleResetForNewApplication = () => {
@@ -369,25 +619,31 @@ export default function App() {
     setStudentName('');
     setFatherName('');
     setDateOfBirth('');
-    setDepartmentId(DEPARTMENTS[0].id);
+    setDepartmentId(defaultDeptId);
     setClassIndex(0);
     setResidentialKey('boarding');
     setMobile('');
     setAddress('');
     setErrors({});
+    setInlineSubmitError('');
   };
+
 
   if (showDashboard && studentToken) {
     return (
       <StudentDashboard
         token={studentToken}
         lang={lang}
+        notices={activeNotices}
+        brandShort={activeBrandShort}
         onChangeLang={setLang}
         onBackToSite={() => setShowDashboard(false)}
         onLogout={handleStudentLogout}
       />
     );
   }
+
+  const telHref = `tel:+88${normalizeMobileNumber(siteSettings.phoneEn || siteSettings.phoneBn || '01711002233')}`;
 
   return (
     <div className="min-h-screen bg-white text-[#0F172A]">
@@ -397,21 +653,21 @@ export default function App() {
           {/* Left: Mobile Number & Email Address */}
           <div className="order-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 lg:order-1 lg:justify-start">
             <a
-              href="tel:+8801711002233"
+              href={telHref}
               className="inline-flex items-center gap-1.5 transition-colors hover:text-[#065F46] tabular-nums whitespace-nowrap"
             >
               <Phone className="h-3.5 w-3.5 text-[#065F46]" aria-hidden="true" />
-              <span>{copy.phoneDisplay}</span>
+              <span>{activePhoneDisplay}</span>
             </a>
             <span aria-hidden="true" className="text-slate-300">
               ·
             </span>
             <a
-              href="mailto:info@aljamiatul-madrasa.edu.bd"
+              href={`mailto:${activeEmail}`}
               className="inline-flex items-center gap-1.5 transition-colors hover:text-[#065F46] whitespace-nowrap"
             >
               <Mail className="h-3.5 w-3.5 text-[#065F46]" aria-hidden="true" />
-              <span>info@aljamiatul-madrasa.edu.bd</span>
+              <span>{activeEmail}</span>
             </a>
           </div>
 
@@ -448,39 +704,48 @@ export default function App() {
             href="#home"
             className="flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46]"
           >
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 32 32"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="shrink-0 text-[#065F46]"
-              aria-hidden="true"
-            >
-              <rect
-                x="1.5"
-                y="1.5"
-                width="29"
-                height="29"
-                rx="6"
-                stroke="currentColor"
-                strokeWidth="1.5"
+            {siteSettings.logoUrl && !logoImgFailed ? (
+              <img
+                src={siteSettings.logoUrl}
+                alt={activeBrandShort}
+                onError={() => setLogoImgFailed(true)}
+                className="h-8 w-8 shrink-0 rounded-md border border-[#E2E8F0] bg-white object-contain p-0.5"
               />
-              <path
-                d="M16 6.5C12.5 9.2 10.5 12.8 10.5 17V24.5H21.5V17C21.5 12.8 19.5 9.2 16 6.5Z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M16 12.5V20.5M12.5 16.5H19.5"
-                stroke="#B45309"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
+            ) : (
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 32 32"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="shrink-0 text-[#065F46]"
+                aria-hidden="true"
+              >
+                <rect
+                  x="1.5"
+                  y="1.5"
+                  width="29"
+                  height="29"
+                  rx="6"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path
+                  d="M16 6.5C12.5 9.2 10.5 12.8 10.5 17V24.5H21.5V17C21.5 12.8 19.5 9.2 16 6.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M16 12.5V20.5M12.5 16.5H19.5"
+                  stroke="#B45309"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            )}
             <span className="font-serif text-sm font-bold tracking-tight text-[#0F172A] sm:text-base xl:text-lg">
-              {copy.brandShort}
+              {activeBrandShort}
             </span>
           </a>
 
@@ -623,8 +888,8 @@ export default function App() {
               aria-hidden="true"
               className="pointer-events-none absolute inset-y-0 right-0 hidden w-[68%] overflow-hidden bg-slate-100 lg:block xl:w-[66%]"
             >
-              {HERO_SLIDES.map((slide, idx) => {
-                const isActive = idx === activeHeroSlide;
+              {activeHeroSlides.map((slide, idx) => {
+                const isActive = idx === safeHeroIndex;
                 const slideFailed = failedHeroSlides[slide.id];
                 return (
                   <div
@@ -677,23 +942,27 @@ export default function App() {
               <div className="flex flex-col justify-center lg:max-w-[52%] lg:self-center xl:max-w-[49%]">
                 <p className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#ECFDF5] px-3 py-1.5 text-xs font-semibold text-[#065F46] sm:text-sm">
                   <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>{copy.heroWelcome}</span>
+                  <span>{lang === 'en' ? heroCms.welcomeEn : heroCms.welcomeBn}</span>
                 </p>
 
                 <h1
                   className="mt-5 font-serif text-3xl font-bold leading-[1.18] tracking-tight sm:text-4xl lg:text-[2.95rem] xl:text-[3.25rem]"
                   style={{ textWrap: 'balance' }}
                 >
-                  <span className="block text-[#065F46]">{copy.heroHeadlineLine1}</span>
-                  <span className="mt-1 block text-[#0F172A]">{copy.heroHeadlineLine2}</span>
+                  <span className="block text-[#065F46]">
+                    {lang === 'en' ? heroCms.headlineLine1En : heroCms.headlineLine1Bn}
+                  </span>
+                  <span className="mt-1 block text-[#0F172A]">
+                    {lang === 'en' ? heroCms.headlineLine2En : heroCms.headlineLine2Bn}
+                  </span>
                 </h1>
 
                 <p className="mt-4 font-serif text-base font-medium text-[#065F46] sm:text-lg">
-                  {copy.heroSubtitle}
+                  {lang === 'en' ? heroCms.subtitleEn : heroCms.subtitleBn}
                 </p>
 
                 <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#475569] sm:text-base">
-                  {copy.heroDescription}
+                  {lang === 'en' ? heroCms.descriptionEn : heroCms.descriptionBn}
                 </p>
 
                 <div className="mt-7 flex flex-wrap items-center gap-3.5">
@@ -716,7 +985,9 @@ export default function App() {
                 </div>
 
                 <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[#E2E8F0] pt-5 text-xs text-[#475569]">
-                  <span className="font-medium text-[#B45309]">{copy.heroBadge}</span>
+                  <span className="font-medium text-[#B45309]">
+                    {lang === 'en' ? heroCms.badgeEn : heroCms.badgeBn}
+                  </span>
                   <span aria-hidden="true" className="text-slate-300">
                     ·
                   </span>
@@ -735,8 +1006,8 @@ export default function App() {
               {/* Mobile & Tablet Clean Photo Carousel (< lg) */}
               <div className="mt-8 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] lg:hidden">
                 <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-100">
-                  {HERO_SLIDES.map((slide, idx) => {
-                    const isActive = idx === activeHeroSlide;
+                  {activeHeroSlides.map((slide, idx) => {
+                    const isActive = idx === safeHeroIndex;
                     const slideFailed = failedHeroSlides[slide.id];
                     return (
                       <div
@@ -759,7 +1030,7 @@ export default function App() {
                           <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-[#F8FAFC] to-slate-100 p-6 text-center">
                             <BookOpen className="h-9 w-9 text-[#065F46]" aria-hidden="true" />
                             <p className="mt-2 font-serif text-sm font-semibold text-[#0F172A]">
-                              {copy.brandFull}
+                              {activeBrandFull}
                             </p>
                           </div>
                         )}
@@ -769,8 +1040,8 @@ export default function App() {
 
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent p-4 text-white">
                     <p className="text-xs font-medium text-emerald-200 tabular-nums">
-                      {formatDigits(activeHeroSlide + 1, lang)} /{' '}
-                      {formatDigits(HERO_SLIDES.length, lang)}
+                      {formatDigits(safeHeroIndex + 1, lang)} /{' '}
+                      {formatDigits(activeHeroSlides.length, lang)}
                     </p>
                     <p className="mt-0.5 font-serif text-sm font-semibold">
                       {lang === 'en' ? currentHeroSlide.titleEn : currentHeroSlide.titleBn}
@@ -784,8 +1055,8 @@ export default function App() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] font-medium text-[#B45309] tabular-nums">
-                      {copy.heroCampusTag} · {formatDigits(activeHeroSlide + 1, lang)}/
-                      {formatDigits(HERO_SLIDES.length, lang)}
+                      {copy.heroCampusTag} · {formatDigits(safeHeroIndex + 1, lang)}/
+                      {formatDigits(activeHeroSlides.length, lang)}
                     </p>
                     <p className="truncate text-xs font-semibold text-[#0F172A] sm:text-sm">
                       {lang === 'en' ? currentHeroSlide.titleEn : currentHeroSlide.titleBn}
@@ -814,8 +1085,8 @@ export default function App() {
 
                 {/* Clickable Multi-Photo Thumbnails */}
                 <div className="mt-2.5 grid grid-cols-5 gap-2">
-                  {HERO_SLIDES.map((slide, idx) => {
-                    const isSelected = idx === activeHeroSlide;
+                  {activeHeroSlides.map((slide, idx) => {
+                    const isSelected = idx === safeHeroIndex;
                     const slideTitle = lang === 'en' ? slide.titleEn : slide.titleBn;
                     const thumbFailed = failedHeroSlides[slide.id];
                     return (
@@ -883,9 +1154,9 @@ export default function App() {
               <div className="lg:col-span-5">
                 <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white">
                   <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100">
-                    {!libraryImgFailed ? (
+                    {!libraryImgFailed && aboutCms.libraryPhotoUrl ? (
                       <img
-                        src="/src/assets/images/madrasa_library_heritage_1794935619165.jpg"
+                        src={aboutCms.libraryPhotoUrl}
                         alt={copy.aboutLibraryFallback}
                         referrerPolicy="no-referrer"
                         onError={() => setLibraryImgFailed(true)}
@@ -902,7 +1173,7 @@ export default function App() {
                   </div>
                   <div className="border-t border-[#E2E8F0] px-5 py-4">
                     <p className="text-xs font-medium text-[#475569]">
-                      {copy.aboutLibraryCaption}
+                      {lang === 'en' ? aboutCms.libraryCaptionEn : aboutCms.libraryCaptionBn}
                     </p>
                   </div>
                 </div>
@@ -911,22 +1182,24 @@ export default function App() {
               {/* Principal's Message & Core Values */}
               <div className="lg:col-span-7">
                 <div className="text-center">
-                  <p className="text-sm font-medium text-[#B45309]">{copy.aboutEyebrow}</p>
+                  <p className="text-sm font-medium text-[#B45309]">
+                    {lang === 'en' ? aboutCms.eyebrowEn : aboutCms.eyebrowBn}
+                  </p>
                   <h2 className="mt-2 font-serif text-2xl font-bold text-[#0F172A] sm:text-3xl">
-                    {copy.aboutHeading}
+                    {lang === 'en' ? aboutCms.headingEn : aboutCms.headingBn}
                   </h2>
                 </div>
 
                 <div className="mt-6 border-y border-[#E2E8F0] py-6">
                   <blockquote className="text-base leading-relaxed text-[#0F172A] sm:text-lg">
-                    {copy.aboutQuote}
+                    {lang === 'en' ? aboutCms.quoteEn : aboutCms.quoteBn}
                   </blockquote>
                   <div className="mt-5 flex items-center gap-3.5 text-sm">
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#E2E8F0] bg-[#F8FAFC]">
-                      {!muhtamimImgFailed ? (
+                      {!muhtamimImgFailed && aboutCms.muhtamimPhotoUrl ? (
                         <img
-                          src="/src/assets/images/teacher_muhtamim_1794936349561.jpg"
-                          alt={copy.aboutMuhtamimTitle}
+                          src={aboutCms.muhtamimPhotoUrl}
+                          alt={lang === 'en' ? aboutCms.muhtamimTitleEn : aboutCms.muhtamimTitleBn}
                           referrerPolicy="no-referrer"
                           onError={() => setMuhtamimImgFailed(true)}
                           className="h-full w-full object-cover object-top"
@@ -938,8 +1211,15 @@ export default function App() {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-[#065F46]">{copy.aboutMuhtamimTitle}</p>
-                      <p className="text-xs text-[#475569] sm:text-sm">{copy.brandFull}</p>
+                      <p className="font-semibold text-[#065F46]">
+                        {lang === 'en' ? aboutCms.muhtamimTitleEn : aboutCms.muhtamimTitleBn}
+                      </p>
+                      {(lang === 'en' ? aboutCms.muhtamimNameEn : aboutCms.muhtamimNameBn) && (
+                        <p className="text-xs font-medium text-[#0F172A]">
+                          {lang === 'en' ? aboutCms.muhtamimNameEn : aboutCms.muhtamimNameBn}
+                        </p>
+                      )}
+                      <p className="text-xs text-[#475569] sm:text-sm">{activeBrandFull}</p>
                     </div>
                   </div>
                 </div>
@@ -1052,78 +1332,130 @@ export default function App() {
               </div>
 
               {/* Filter Tabs */}
-              <div
-                role="tablist"
-                aria-label={copy.noticesHeading}
-                className="inline-flex flex-wrap items-center justify-center gap-1 rounded-lg border border-[#E2E8F0] bg-white p-1"
-              >
-                {copy.noticeFilters.map((tab) => {
-                  const isActive = noticeFilter === tab.id;
-                  return (
+              <div className="flex flex-col items-center gap-3">
+                <div
+                  role="tablist"
+                  aria-label={copy.noticesHeading}
+                  className="inline-flex flex-wrap items-center justify-center gap-1 rounded-lg border border-[#E2E8F0] bg-white p-1"
+                >
+                  {copy.noticeFilters.map((tab) => {
+                    const isActive = noticeFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setNoticeFilter(tab.id)}
+                        className={`rounded-md px-3.5 py-2 text-xs font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:text-sm ${
+                          isActive
+                            ? 'bg-[#065F46] text-white'
+                            : 'text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {archivedNotices.length > 0 && (
+                  <div className="inline-flex items-center gap-1 rounded-lg border border-[#E2E8F0] bg-white p-1 text-xs">
                     <button
-                      key={tab.id}
                       type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => setNoticeFilter(tab.id)}
-                      className={`rounded-md px-3.5 py-2 text-xs font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 sm:text-sm ${
-                        isActive
-                          ? 'bg-[#065F46] text-white'
-                          : 'text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
+                      onClick={() => setNoticeArchiveMode('active')}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors ${
+                        noticeArchiveMode === 'active'
+                          ? 'bg-[#065F46]/10 text-[#065F46]'
+                          : 'text-[#475569] hover:text-[#0F172A]'
                       }`}
                     >
-                      {tab.label}
+                      <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>
+                        {lang === 'en'
+                          ? `Active Notices (${formatDigits(activeNotices.length, lang)})`
+                          : `চলমান নোটিশ (${formatDigits(activeNotices.length, lang)})`}
+                      </span>
                     </button>
-                  );
-                })}
+                    <button
+                      type="button"
+                      onClick={() => setNoticeArchiveMode('archived')}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors ${
+                        noticeArchiveMode === 'archived'
+                          ? 'bg-[#B45309]/10 text-[#B45309]'
+                          : 'text-[#475569] hover:text-[#0F172A]'
+                      }`}
+                    >
+                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>
+                        {lang === 'en'
+                          ? `Previous Notices (${formatDigits(archivedNotices.length, lang)})`
+                          : `পূর্বের সংরক্ষিত নোটিশ (${formatDigits(archivedNotices.length, lang)})`}
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Notices Grid */}
-            <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {filteredNotices.map((notice) => (
-                <article
-                  key={notice.id}
-                  className="flex flex-col justify-between rounded-xl border border-[#E2E8F0] bg-white p-6 transition-transform duration-200 hover:-translate-y-0.5"
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#475569]">
-                      <span className="font-semibold text-[#065F46]">
-                        {lang === 'en'
-                          ? NOTICE_CATEGORY_EN[notice.category]
-                          : notice.category}
-                      </span>
-                      <span aria-hidden="true" className="text-slate-300">
-                        ·
-                      </span>
-                      <span className="tabular-nums">{notice.date}</span>
+            {filteredNotices.length > 0 ? (
+              <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {filteredNotices.map((notice) => (
+                  <article
+                    key={notice.id}
+                    className="flex flex-col justify-between rounded-xl border border-[#E2E8F0] bg-white p-6 transition-transform duration-200 hover:-translate-y-0.5"
+                  >
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#475569]">
+                        <span className="font-semibold text-[#065F46]">
+                          {lang === 'en'
+                            ? NOTICE_CATEGORY_EN[notice.category]
+                            : notice.category}
+                        </span>
+                        <span aria-hidden="true" className="text-slate-300">
+                          ·
+                        </span>
+                        <span className="tabular-nums">{notice.date}</span>
+                        {noticeArchiveMode === 'archived' && (
+                          <span className="ml-auto rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-[#B45309]">
+                            {lang === 'en' ? 'Archived' : 'সংরক্ষিত'}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="mt-3 font-serif text-lg font-semibold leading-snug text-[#0F172A]">
+                        {notice.title}
+                      </h3>
+
+                      <p className="mt-2.5 text-sm leading-relaxed text-[#475569]">
+                        {notice.summary}
+                      </p>
                     </div>
 
-                    <h3 className="mt-3 font-serif text-lg font-semibold leading-snug text-[#0F172A]">
-                      {notice.title}
-                    </h3>
-
-                    <p className="mt-2.5 text-sm leading-relaxed text-[#475569]">
-                      {notice.summary}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 flex items-center justify-between gap-3 border-t border-[#E2E8F0] pt-4">
-                    <span className="truncate text-xs text-[#475569] tabular-nums">
-                      {notice.refNumber}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNoticeId(notice.id)}
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#065F46] transition-colors hover:text-[#047857] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
-                    >
-                      <FileText className="h-4 w-4" aria-hidden="true" />
-                      <span>{copy.noticeViewDetails}</span>
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <div className="mt-6 flex items-center justify-between gap-3 border-t border-[#E2E8F0] pt-4">
+                      <span className="truncate text-xs text-[#475569] tabular-nums">
+                        {notice.refNumber}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNoticeId(notice.id)}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#065F46] transition-colors hover:text-[#047857] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
+                      >
+                        <FileText className="h-4 w-4" aria-hidden="true" />
+                        <span>{copy.noticeViewDetails}</span>
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-10 rounded-xl border border-dashed border-[#E2E8F0] bg-white p-10 text-center text-sm text-[#475569]">
+                {lang === 'en'
+                  ? 'No notices available in this category.'
+                  : 'এই বিভাগে বর্তমানে কোনো নোটিশ নেই।'}
+              </div>
+            )}
           </div>
         </section>
 
@@ -1509,8 +1841,8 @@ export default function App() {
                       onChange={(e) => setClassIndex(Number(e.target.value))}
                       className="mt-2 w-full rounded-lg border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
                     >
-                      {selectedInlineDept.classes.map((cls, idx) => (
-                        <option key={cls} value={idx}>
+                      {selectedInlineDept?.classes.map((cls, idx) => (
+                        <option key={`${cls}-${idx}`} value={idx}>
                           {cls}
                         </option>
                       ))}
@@ -1619,15 +1951,31 @@ export default function App() {
                   )}
                 </div>
 
+                {inlineSubmitError && (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-700"
+                  >
+                    {inlineSubmitError}
+                  </div>
+                )}
+
                 <div className="flex flex-col items-start justify-between gap-4 border-t border-[#E2E8F0] pt-6 sm:flex-row sm:items-center">
                   <p className="text-xs leading-relaxed text-[#475569]">
                     {copy.inlineFormNote}
                   </p>
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-7 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
+                    disabled={inlineSubmitting}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-7 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0"
                   >
-                    <span>{copy.inlineFormSubmit}</span>
+                    <span>
+                      {inlineSubmitting
+                        ? lang === 'en'
+                          ? 'Submitting...'
+                          : 'জমা হচ্ছে...'
+                        : copy.inlineFormSubmit}
+                    </span>
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
@@ -1646,11 +1994,26 @@ export default function App() {
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
             {/* Column 1: Madrasa Info */}
             <div>
-              <p className="font-serif text-lg font-bold text-[#0F172A]">{copy.brandFull}</p>
+              <div className="flex items-center gap-2.5">
+                {siteSettings.logoUrl && !logoImgFailed && (
+                  <img
+                    src={siteSettings.logoUrl}
+                    alt={activeBrandShort}
+                    className="h-8 w-8 rounded-md border border-[#E2E8F0] bg-white object-contain p-0.5"
+                  />
+                )}
+                <p className="font-serif text-lg font-bold text-[#0F172A]">{activeBrandFull}</p>
+              </div>
               <p className="mt-3 text-sm leading-relaxed text-[#475569]">
-                {copy.footerAboutDesc}
+                {lang === 'en'
+                  ? siteSettings.footerDescEn || copy.footerAboutDesc
+                  : siteSettings.footerDescBn || copy.footerAboutDesc}
               </p>
-              <p className="mt-4 text-xs text-[#475569]">{copy.footerReg}</p>
+              <p className="mt-4 text-xs text-[#475569]">
+                {lang === 'en'
+                  ? siteSettings.footerRegEn || copy.footerReg
+                  : siteSettings.footerRegBn || copy.footerReg}
+              </p>
             </div>
 
             {/* Column 2: Quick Links */}
@@ -1680,26 +2043,26 @@ export default function App() {
               <ul className="mt-4 space-y-3 text-sm text-[#475569]">
                 <li className="flex items-start gap-2.5">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
-                  <span>{copy.footerAddress}</span>
+                  <span>{activeAddress}</span>
                 </li>
                 <li className="flex items-center gap-2.5 tabular-nums">
                   <Phone className="h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
-                  <a href="tel:+8801711002233" className="hover:text-[#065F46]">
-                    {copy.phoneFooter}
+                  <a href={telHref} className="hover:text-[#065F46]">
+                    {activePhoneDisplay}
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <Mail className="h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
                   <a
-                    href="mailto:info@aljamiatul-madrasa.edu.bd"
+                    href={`mailto:${activeEmail}`}
                     className="break-all hover:text-[#065F46]"
                   >
-                    info@aljamiatul-madrasa.edu.bd
+                    {activeEmail}
                   </a>
                 </li>
               </ul>
               <a
-                href="https://maps.google.com/?q=Mohammadpur,Dhaka+1207"
+                href={`https://maps.google.com/?q=${encodeURIComponent(activeAddress)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#065F46] underline-offset-4 hover:underline"
@@ -1718,21 +2081,41 @@ export default function App() {
                 <li className="flex items-start gap-2.5">
                   <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
                   <div>
-                    <p className="font-medium text-[#0F172A]">{copy.footerDays}</p>
-                    <p className="tabular-nums">{copy.footerHours}</p>
+                    <p className="font-medium text-[#0F172A]">
+                      {lang === 'en'
+                        ? siteSettings.officeDaysEn || copy.footerDays
+                        : siteSettings.officeDaysBn || copy.footerDays}
+                    </p>
+                    <p className="tabular-nums">
+                      {lang === 'en'
+                        ? siteSettings.officeHoursEn || copy.footerHours
+                        : siteSettings.officeHoursBn || copy.footerHours}
+                    </p>
                   </div>
                 </li>
                 <li className="border-t border-[#E2E8F0] pt-2.5">
                   <p className="font-medium text-[#0F172A]">{copy.footerInterviewLabel}</p>
-                  <p className="tabular-nums">{copy.footerInterviewHours}</p>
+                  <p className="tabular-nums">
+                    {lang === 'en'
+                      ? siteSettings.interviewHoursEn || copy.footerInterviewHours
+                      : siteSettings.interviewHoursBn || copy.footerInterviewHours}
+                  </p>
                 </li>
-                <li className="text-xs text-[#B45309]">{copy.footerHoliday}</li>
+                <li className="text-xs text-[#B45309]">
+                  {lang === 'en'
+                    ? siteSettings.holidayNoteEn || copy.footerHoliday
+                    : siteSettings.holidayNoteBn || copy.footerHoliday}
+                </li>
               </ul>
             </div>
           </div>
 
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569] sm:flex-row">
-            <p>{copy.footerCopyright}</p>
+            <p>
+              {lang === 'en'
+                ? siteSettings.copyrightEn || copy.footerCopyright
+                : siteSettings.copyrightBn || copy.footerCopyright}
+            </p>
             <p>{copy.footerMotto}</p>
           </div>
         </div>
@@ -1741,12 +2124,15 @@ export default function App() {
       {/* Interactive Modals */}
       <NoticeModal
         notice={selectedNotice}
+        institutionLine={activeBrandFull}
         lang={lang}
         onClose={() => setSelectedNoticeId(null)}
       />
 
       <ReceiptModal
         submission={receiptModalOpen ? latestSubmission : null}
+        departments={activeDepartments}
+        brandFull={activeBrandFull}
         lang={lang}
         onClose={() => setReceiptModalOpen(false)}
         onNewApplication={handleResetForNewApplication}
@@ -1776,6 +2162,8 @@ export default function App() {
       <AdmissionFormModal
         isOpen={admissionModalOpen}
         initialDepartmentId={admissionInitialDeptId}
+        departments={activeDepartments}
+        bnDepartments={bnDepartments}
         lang={lang}
         onClose={() => setAdmissionModalOpen(false)}
         onSubmitted={(submission) => {

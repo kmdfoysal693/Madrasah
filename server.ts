@@ -11,6 +11,20 @@ import type {
   StudentUser,
   TuitionRecord,
 } from './src/data/studentPortalData.ts';
+import type {
+  AdmissionStatus,
+  CmsDepartment,
+  CmsGalleryItem,
+  CmsNotice,
+  CmsTeacherProfile,
+  HeroSectionCms,
+  NoticeStatus,
+  AboutSectionCms,
+  SiteCmsData,
+  SiteSettingsCms,
+  StoredAdmissionRecord,
+} from './src/data/cmsTypes.ts';
+import { createDefaultCmsData } from './src/data/defaultCmsSeed.ts';
 
 interface StoredStudentRecord {
   id: string;
@@ -36,11 +50,19 @@ interface StudentDatabase {
 const PORT = 3000;
 const DATA_DIR = path.resolve(process.cwd(), '.data');
 const DB_FILE = path.join(DATA_DIR, 'students.json');
+const CMS_FILE = path.join(DATA_DIR, 'cms.json');
+const ADMISSIONS_FILE = path.join(DATA_DIR, 'admissions.json');
+const ADMIN_FILE = path.join(DATA_DIR, 'admin.json');
+const ADMIN_UI_FILE = path.join(DATA_DIR, 'admin_ui.json');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const SECRET_FILE = path.join(DATA_DIR, '.session_secret');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
 }
 
@@ -83,6 +105,131 @@ function writeDatabase(db: StudentDatabase) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
 }
 
+function readCmsDatabase(): SiteCmsData {
+  try {
+    ensureDataDir();
+    if (!fs.existsSync(CMS_FILE)) {
+      const seeded = createDefaultCmsData();
+      fs.writeFileSync(CMS_FILE, JSON.stringify(seeded, null, 2), 'utf8');
+      return seeded;
+    }
+    const raw = fs.readFileSync(CMS_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<SiteCmsData>;
+    const fallback = createDefaultCmsData();
+    return {
+      siteSettings: { ...fallback.siteSettings, ...(parsed.siteSettings ?? {}) },
+      heroSection: {
+        ...fallback.heroSection,
+        ...(parsed.heroSection ?? {}),
+        slides: Array.isArray(parsed.heroSection?.slides)
+          ? parsed.heroSection.slides
+          : fallback.heroSection.slides,
+        stats: Array.isArray(parsed.heroSection?.stats)
+          ? parsed.heroSection.stats
+          : fallback.heroSection.stats,
+      },
+      aboutSection: {
+        ...fallback.aboutSection,
+        ...(parsed.aboutSection ?? {}),
+        coreValues: Array.isArray(parsed.aboutSection?.coreValues)
+          ? parsed.aboutSection.coreValues
+          : fallback.aboutSection.coreValues,
+      },
+      departments: Array.isArray(parsed.departments) ? parsed.departments : fallback.departments,
+      notices: Array.isArray(parsed.notices) ? parsed.notices : fallback.notices,
+      gallery: Array.isArray(parsed.gallery) ? parsed.gallery : fallback.gallery,
+      teachers: Array.isArray(parsed.teachers) ? parsed.teachers : fallback.teachers,
+      updatedAt: parsed.updatedAt ?? fallback.updatedAt,
+    };
+  } catch {
+    return createDefaultCmsData();
+  }
+}
+
+function writeCmsDatabase(cms: SiteCmsData) {
+  ensureDataDir();
+  cms.updatedAt = new Date().toISOString();
+  fs.writeFileSync(CMS_FILE, JSON.stringify(cms, null, 2), 'utf8');
+}
+
+interface AdmissionsDatabase {
+  admissions: StoredAdmissionRecord[];
+}
+
+function readAdmissionsDatabase(): AdmissionsDatabase {
+  try {
+    ensureDataDir();
+    if (!fs.existsSync(ADMISSIONS_FILE)) {
+      return { admissions: [] };
+    }
+    const raw = fs.readFileSync(ADMISSIONS_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as AdmissionsDatabase;
+    return Array.isArray(parsed.admissions) ? parsed : { admissions: [] };
+  } catch {
+    return { admissions: [] };
+  }
+}
+
+function writeAdmissionsDatabase(data: AdmissionsDatabase) {
+  ensureDataDir();
+  fs.writeFileSync(ADMISSIONS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+interface AdminCredentialStore {
+  username: string;
+  passwordSalt: string;
+  passwordHash: string;
+}
+
+function readOrInitAdminStore(): AdminCredentialStore {
+  ensureDataDir();
+  try {
+    if (fs.existsSync(ADMIN_FILE)) {
+      const raw = fs.readFileSync(ADMIN_FILE, 'utf8');
+      const parsed = JSON.parse(raw) as AdminCredentialStore;
+      if (parsed.username && parsed.passwordSalt && parsed.passwordHash) {
+        return parsed;
+      }
+    }
+  } catch {
+    // re-seed below
+  }
+  const username = (process.env.ADMIN_USERNAME || 'admin').trim().toLowerCase();
+  const initialPassword = process.env.ADMIN_PASSWORD || 'madrasa1448';
+  const { salt, hash } = hashPassword(initialPassword);
+  const store: AdminCredentialStore = {
+    username,
+    passwordSalt: salt,
+    passwordHash: hash,
+  };
+  fs.writeFileSync(ADMIN_FILE, JSON.stringify(store, null, 2), 'utf8');
+  return store;
+}
+
+function writeAdminStore(store: AdminCredentialStore) {
+  ensureDataDir();
+  fs.writeFileSync(ADMIN_FILE, JSON.stringify(store, null, 2), 'utf8');
+}
+
+function readAdminUiConfig(): Record<string, unknown> | null {
+  try {
+    ensureDataDir();
+    if (!fs.existsSync(ADMIN_UI_FILE)) {
+      return null;
+    }
+    const raw = fs.readFileSync(ADMIN_UI_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAdminUiConfig(config: Record<string, unknown>) {
+  ensureDataDir();
+  fs.writeFileSync(ADMIN_UI_FILE, JSON.stringify(config, null, 2), 'utf8');
+}
+
 const BENGALI_TO_ASCII_DIGITS: Record<string, string> = {
   '০': '0',
   '১': '1',
@@ -121,10 +268,11 @@ function verifyPassword(password: string, salt: string, storedHash: string): boo
   return crypto.timingSafeEqual(a, b);
 }
 
-function signToken(studentId: string): string {
+function signToken(sub: string, role: 'student' | 'admin' = 'student'): string {
   const payload = Buffer.from(
     JSON.stringify({
-      sub: studentId,
+      sub,
+      role,
       exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
     }),
   ).toString('base64url');
@@ -135,7 +283,7 @@ function signToken(studentId: string): string {
   return `${payload}.${signature}`;
 }
 
-function verifyToken(token: string): string | null {
+function verifyTokenPayload(token: string): { sub: string; role: 'student' | 'admin' } | null {
   const parts = token.split('.');
   if (parts.length !== 2) return null;
   const [payload, providedSig] = parts;
@@ -151,15 +299,42 @@ function verifyToken(token: string): string | null {
   try {
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
       sub?: string;
+      role?: 'student' | 'admin';
       exp?: number;
     };
     if (!decoded.sub || !decoded.exp || decoded.exp < Date.now()) {
       return null;
     }
-    return decoded.sub;
+    return { sub: decoded.sub, role: decoded.role ?? 'student' };
   } catch {
     return null;
   }
+}
+
+function verifyToken(token: string): string | null {
+  const parsed = verifyTokenPayload(token);
+  if (!parsed || parsed.role !== 'student') return null;
+  return parsed.sub;
+}
+
+function verifyAdminRequest(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.slice(7).trim();
+  const parsed = verifyTokenPayload(token);
+  if (!parsed || parsed.role !== 'admin') return null;
+  return parsed.sub;
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const adminUser = verifyAdminRequest(req);
+  if (!adminUser) {
+    res.status(401).json({ error: 'অননুমোদিত প্রবেশ। অনুগ্রহ করে অ্যাডমিন হিসেবে লগইন করুন।' });
+    return;
+  }
+  next();
 }
 
 function sanitizeStudent(record: StoredStudentRecord): StudentUser {
@@ -384,8 +559,13 @@ function getAuthenticatedStudent(req: Request): StoredStudentRecord | null {
 }
 
 async function startServer() {
+  ensureDataDir();
+  readOrInitAdminStore();
+  readCmsDatabase();
+
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
+  app.use('/uploads', express.static(UPLOADS_DIR));
   app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (err instanceof SyntaxError && 'body' in err) {
       res.status(400).json({ error: 'অনুরোধের তথ্য (JSON) সঠিক নয়।' });
@@ -579,6 +759,524 @@ async function startServer() {
     }
 
     res.json({ tuitionRecords: db.students[studentIndex].tuitionRecords });
+  });
+
+  // ============================================================================
+  // PUBLIC CMS & ONLINE ADMISSION ENDPOINTS
+  // ============================================================================
+
+  // 6. Get Full Public CMS Data
+  app.get('/api/cms', (_req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    res.json({ cms });
+  });
+
+  // 7. Submit & Persist Online Admission Form
+  app.post('/api/admissions', (req: Request, res: Response) => {
+    const body = req.body as Partial<StoredAdmissionRecord>;
+    const studentName = (body.studentName ?? '').trim();
+    const fatherName = (body.fatherName ?? '').trim();
+    const dateOfBirth = (body.dateOfBirth ?? '').trim();
+    const department = (body.department ?? '').trim();
+    const departmentId = (body.departmentId ?? '').trim();
+    const className = (body.className ?? '').trim();
+    const classIndex = typeof body.classIndex === 'number' ? body.classIndex : 0;
+    const residentialType = (body.residentialType ?? 'আবাসিক (বোর্ডিং)').trim();
+    const residentialKey = body.residentialKey ?? 'boarding';
+    const mobile = normalizePhone(body.mobile ?? '');
+    const address = (body.address ?? '').trim();
+
+    if (studentName.length < 2) {
+      res.status(400).json({ error: 'অনুগ্রহ করে শিক্ষার্থীর পূর্ণ নাম লিখুন।' });
+      return;
+    }
+    if (fatherName.length < 2) {
+      res.status(400).json({ error: 'অনুগ্রহ করে পিতার পূর্ণ নাম লিখুন।' });
+      return;
+    }
+    if (!department || !className) {
+      res.status(400).json({ error: 'বিভাগ ও ক্লাস নির্বাচন করুন।' });
+      return;
+    }
+    if (!/^01[3-9]\d{8}$/.test(mobile)) {
+      res.status(400).json({ error: 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)।' });
+      return;
+    }
+    if (address.length < 4) {
+      res.status(400).json({ error: 'অনুগ্রহ করে বর্তমান ঠিকানা লিখুন।' });
+      return;
+    }
+
+    const db = readAdmissionsDatabase();
+    let trackingId = (body.trackingId ?? '').trim();
+    if (!trackingId || db.admissions.some((a) => a.trackingId === trackingId)) {
+      do {
+        trackingId = `ADM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      } while (db.admissions.some((a) => a.trackingId === trackingId));
+    }
+
+    const record: StoredAdmissionRecord = {
+      id: crypto.randomUUID(),
+      trackingId,
+      submittedAt: (body.submittedAt ?? new Date().toLocaleDateString('bn-BD')).trim(),
+      submittedAtIso: new Date().toISOString(),
+      studentName,
+      fatherName,
+      dateOfBirth,
+      department,
+      departmentId,
+      className,
+      classIndex,
+      residentialType,
+      residentialKey,
+      mobile,
+      address,
+      status: 'pending',
+      adminNote: '',
+    };
+
+    db.admissions.unshift(record);
+    writeAdmissionsDatabase(db);
+    res.status(201).json({ admission: record });
+  });
+
+  // ============================================================================
+  // ADMIN AUTH & BACKEND CMS DASHBOARD ENDPOINTS
+  // ============================================================================
+
+  app.post('/api/admin/login', (req: Request, res: Response) => {
+    const body = req.body as { username?: string; password?: string };
+    const username = (body.username ?? '').trim().toLowerCase();
+    const password = body.password ?? '';
+
+    if (!username || !password) {
+      res.status(400).json({ error: 'ইউজারনেম ও পাসওয়ার্ড লিখুন।' });
+      return;
+    }
+
+    const adminStore = readOrInitAdminStore();
+    if (
+      username !== adminStore.username ||
+      !verifyPassword(password, adminStore.passwordSalt, adminStore.passwordHash)
+    ) {
+      res.status(401).json({ error: 'অ্যাডমিন ইউজারনেম অথবা পাসওয়ার্ড সঠিক নয়।' });
+      return;
+    }
+
+    const token = signToken(adminStore.username, 'admin');
+    res.json({ token, admin: { username: adminStore.username } });
+  });
+
+  app.get('/api/admin/me', requireAdmin, (req: Request, res: Response) => {
+    const username = verifyAdminRequest(req);
+    res.json({ admin: { username } });
+  });
+
+  app.post('/api/admin/change-password', requireAdmin, (req: Request, res: Response) => {
+    const body = req.body as { currentPassword?: string; newPassword?: string };
+    const currentPassword = body.currentPassword ?? '';
+    const newPassword = body.newPassword ?? '';
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' });
+      return;
+    }
+
+    const adminStore = readOrInitAdminStore();
+    if (!verifyPassword(currentPassword, adminStore.passwordSalt, adminStore.passwordHash)) {
+      res.status(401).json({ error: 'বর্তমান পাসওয়ার্ড সঠিক নয়।' });
+      return;
+    }
+
+    const { salt, hash } = hashPassword(newPassword);
+    writeAdminStore({
+      username: adminStore.username,
+      passwordSalt: salt,
+      passwordHash: hash,
+    });
+    res.json({ ok: true });
+  });
+
+  // Image Upload Endpoint (saves binary file into .data/uploads/)
+  app.post('/api/admin/upload', requireAdmin, (req: Request, res: Response) => {
+    const body = req.body as { filename?: string; dataUrl?: string };
+    const dataUrl = body.dataUrl ?? '';
+    const match = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,(.+)$/i);
+    if (!match) {
+      res.status(400).json({ error: 'সঠিক ছবি ফাইল (PNG, JPG, WEBP বা SVG) নির্বাচন করুন।' });
+      return;
+    }
+
+    const mimeSubtype = match[1].toLowerCase();
+    const ext =
+      mimeSubtype === 'jpeg' || mimeSubtype === 'jpg'
+        ? 'jpg'
+        : mimeSubtype === 'svg+xml'
+          ? 'svg'
+          : mimeSubtype;
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length > 8 * 1024 * 1024) {
+      res.status(400).json({ error: 'ছবির সাইজ ৮ মেগাবাইটের কম হতে হবে।' });
+      return;
+    }
+
+    ensureDataDir();
+    const safeName = `img-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, safeName), buffer);
+    res.status(201).json({ url: `/uploads/${safeName}` });
+  });
+
+  app.get('/api/admin/cms', requireAdmin, (_req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    res.json({ cms });
+  });
+
+  app.put('/api/admin/site-settings', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const incoming = req.body as Partial<SiteSettingsCms>;
+    cms.siteSettings = { ...cms.siteSettings, ...incoming };
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  app.put('/api/admin/hero', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const incoming = req.body as Partial<HeroSectionCms>;
+    cms.heroSection = {
+      ...cms.heroSection,
+      ...incoming,
+      slides: Array.isArray(incoming.slides) ? incoming.slides : cms.heroSection.slides,
+      stats: Array.isArray(incoming.stats) ? incoming.stats : cms.heroSection.stats,
+    };
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  app.put('/api/admin/about', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const incoming = req.body as Partial<AboutSectionCms>;
+    cms.aboutSection = {
+      ...cms.aboutSection,
+      ...incoming,
+      coreValues: Array.isArray(incoming.coreValues)
+        ? incoming.coreValues
+        : cms.aboutSection.coreValues,
+    };
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  // Departments CRUD
+  app.post('/api/admin/departments', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const body = req.body as Partial<CmsDepartment>;
+    if (!(body.nameBn ?? '').trim()) {
+      res.status(400).json({ error: 'বিভাগের বাংলা নাম আবশ্যক।' });
+      return;
+    }
+    const nextCodeNum = String(cms.departments.length + 1).padStart(2, '0');
+    const dept: CmsDepartment = {
+      id: (body.id ?? '').trim() || `dept-${Date.now()}`,
+      codeBn: (body.codeBn ?? '').trim() || nextCodeNum,
+      codeEn: (body.codeEn ?? '').trim() || nextCodeNum,
+      nameBn: (body.nameBn ?? '').trim(),
+      nameEn: (body.nameEn ?? '').trim() || (body.nameBn ?? '').trim(),
+      subtitleBn: (body.subtitleBn ?? '').trim(),
+      subtitleEn: (body.subtitleEn ?? '').trim() || (body.subtitleBn ?? '').trim(),
+      durationBn: (body.durationBn ?? '').trim() || '১ বছর',
+      durationEn: (body.durationEn ?? '').trim() || '1 Year',
+      ageGroupBn: (body.ageGroupBn ?? '').trim() || 'সকল বয়স',
+      ageGroupEn: (body.ageGroupEn ?? '').trim() || 'All Ages',
+      descriptionBn: (body.descriptionBn ?? '').trim(),
+      descriptionEn: (body.descriptionEn ?? '').trim() || (body.descriptionBn ?? '').trim(),
+      highlightsBn: Array.isArray(body.highlightsBn) ? body.highlightsBn.filter(Boolean) : [],
+      highlightsEn: Array.isArray(body.highlightsEn)
+        ? body.highlightsEn.filter(Boolean)
+        : Array.isArray(body.highlightsBn)
+          ? body.highlightsBn.filter(Boolean)
+          : [],
+      classesBn: Array.isArray(body.classesBn) && body.classesBn.length > 0
+        ? body.classesBn.filter(Boolean)
+        : ['১ম বর্ষ'],
+      classesEn:
+        Array.isArray(body.classesEn) && body.classesEn.length > 0
+          ? body.classesEn.filter(Boolean)
+          : Array.isArray(body.classesBn) && body.classesBn.length > 0
+            ? body.classesBn.filter(Boolean)
+            : ['1st Year'],
+    };
+    cms.departments.push(dept);
+    writeCmsDatabase(cms);
+    res.status(201).json({ cms, department: dept });
+  });
+
+  app.put('/api/admin/departments/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const idx = cms.departments.findIndex((d) => d.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'বিভাগটি পাওয়া যায়নি।' });
+      return;
+    }
+    const body = req.body as Partial<CmsDepartment>;
+    cms.departments[idx] = { ...cms.departments[idx], ...body, id: cms.departments[idx].id };
+    writeCmsDatabase(cms);
+    res.json({ cms, department: cms.departments[idx] });
+  });
+
+  app.delete('/api/admin/departments/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    if (cms.departments.length <= 1) {
+      res.status(400).json({ error: 'কমপক্ষে একটি শিক্ষা বিভাগ থাকতে হবে।' });
+      return;
+    }
+    cms.departments = cms.departments.filter((d) => d.id !== req.params.id);
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  // Notices CRUD + Archive (Save Previous Notices)
+  app.post('/api/admin/notices', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const body = req.body as Partial<CmsNotice>;
+    if (!(body.titleBn ?? '').trim()) {
+      res.status(400).json({ error: 'নোটিশের শিরোনাম আবশ্যক।' });
+      return;
+    }
+    const todayBn = new Date().toLocaleDateString('bn-BD', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const todayEn = new Date().toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+    const notice: CmsNotice = {
+      id: `notice-${Date.now()}`,
+      status: body.status === 'archived' ? 'archived' : 'active',
+      category: body.category ?? 'সাধারণ',
+      dateBn: (body.dateBn ?? '').trim() || todayBn,
+      dateEn: (body.dateEn ?? '').trim() || todayEn,
+      hijriDateBn: (body.hijriDateBn ?? '').trim() || 'জমাদিউস সানি ১৪৪৮ হি.',
+      hijriDateEn: (body.hijriDateEn ?? '').trim() || 'Jumada al-Thani 1448 AH',
+      refNumber: (body.refNumber ?? '').trim() || `স্মারক: জা.ই./২০২৬-${cms.notices.length + 105}`,
+      titleBn: (body.titleBn ?? '').trim(),
+      titleEn: (body.titleEn ?? '').trim() || (body.titleBn ?? '').trim(),
+      summaryBn: (body.summaryBn ?? '').trim(),
+      summaryEn: (body.summaryEn ?? '').trim() || (body.summaryBn ?? '').trim(),
+      fullTextBn: Array.isArray(body.fullTextBn) ? body.fullTextBn.filter(Boolean) : [],
+      fullTextEn:
+        Array.isArray(body.fullTextEn) && body.fullTextEn.length > 0
+          ? body.fullTextEn.filter(Boolean)
+          : Array.isArray(body.fullTextBn)
+            ? body.fullTextBn.filter(Boolean)
+            : [],
+      issuedByBn: (body.issuedByBn ?? '').trim() || 'মুহতামিম, আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা',
+      issuedByEn: (body.issuedByEn ?? '').trim() || 'Muhtamim, Al-Jamiatul Islamia Adarsha Madrasa',
+      createdAt: new Date().toISOString(),
+    };
+    cms.notices.unshift(notice);
+    writeCmsDatabase(cms);
+    res.status(201).json({ cms, notice });
+  });
+
+  app.put('/api/admin/notices/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const idx = cms.notices.findIndex((n) => n.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'নোটিশটি পাওয়া যায়নি।' });
+      return;
+    }
+    const body = req.body as Partial<CmsNotice>;
+    cms.notices[idx] = { ...cms.notices[idx], ...body, id: cms.notices[idx].id };
+    writeCmsDatabase(cms);
+    res.json({ cms, notice: cms.notices[idx] });
+  });
+
+  app.patch('/api/admin/notices/:id/status', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const idx = cms.notices.findIndex((n) => n.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'নোটিশটি পাওয়া যায়নি।' });
+      return;
+    }
+    const { status } = req.body as { status?: NoticeStatus };
+    if (status !== 'active' && status !== 'archived') {
+      res.status(400).json({ error: 'অবস্থা (status) সঠিক নয়।' });
+      return;
+    }
+    cms.notices[idx].status = status;
+    cms.notices[idx].archivedAt = status === 'archived' ? new Date().toISOString() : undefined;
+    writeCmsDatabase(cms);
+    res.json({ cms, notice: cms.notices[idx] });
+  });
+
+  app.delete('/api/admin/notices/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    cms.notices = cms.notices.filter((n) => n.id !== req.params.id);
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  // Gallery CRUD
+  app.post('/api/admin/gallery', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const body = req.body as Partial<CmsGalleryItem>;
+    if (!(body.titleBn ?? '').trim() || !(body.imageUrl ?? '').trim()) {
+      res.status(400).json({ error: 'ছবির শিরোনাম ও ছবি আবশ্যক।' });
+      return;
+    }
+    const item: CmsGalleryItem = {
+      id: `gal-${Date.now()}`,
+      titleBn: (body.titleBn ?? '').trim(),
+      titleEn: (body.titleEn ?? '').trim() || (body.titleBn ?? '').trim(),
+      category: body.category ?? 'ক্যাম্পাস',
+      dateBn: (body.dateBn ?? '').trim() || 'নভেম্বর ২০২৬',
+      dateEn: (body.dateEn ?? '').trim() || 'November 2026',
+      imageUrl: (body.imageUrl ?? '').trim(),
+    };
+    cms.gallery.unshift(item);
+    writeCmsDatabase(cms);
+    res.status(201).json({ cms, item });
+  });
+
+  app.put('/api/admin/gallery/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const idx = cms.gallery.findIndex((g) => g.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'ছবিটি পাওয়া যায়নি।' });
+      return;
+    }
+    const body = req.body as Partial<CmsGalleryItem>;
+    cms.gallery[idx] = { ...cms.gallery[idx], ...body, id: cms.gallery[idx].id };
+    writeCmsDatabase(cms);
+    res.json({ cms, item: cms.gallery[idx] });
+  });
+
+  app.delete('/api/admin/gallery/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    cms.gallery = cms.gallery.filter((g) => g.id !== req.params.id);
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  // Teachers CRUD
+  app.post('/api/admin/teachers', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const body = req.body as Partial<CmsTeacherProfile>;
+    if (!(body.nameBn ?? '').trim() || !(body.designationBn ?? '').trim()) {
+      res.status(400).json({ error: 'শিক্ষকের নাম ও পদবি আবশ্যক।' });
+      return;
+    }
+    const teacher: CmsTeacherProfile = {
+      id: `teacher-${Date.now()}`,
+      nameBn: (body.nameBn ?? '').trim(),
+      nameEn: (body.nameEn ?? '').trim() || (body.nameBn ?? '').trim(),
+      designationBn: (body.designationBn ?? '').trim(),
+      designationEn: (body.designationEn ?? '').trim() || (body.designationBn ?? '').trim(),
+      departmentBn: (body.departmentBn ?? '').trim() || 'সাধারণ ও দ্বীনি বিভাগ',
+      departmentEn: (body.departmentEn ?? '').trim() || (body.departmentBn ?? '').trim() || 'Academic Department',
+      qualificationBn: (body.qualificationBn ?? '').trim(),
+      qualificationEn: (body.qualificationEn ?? '').trim() || (body.qualificationBn ?? '').trim(),
+      experienceBn: (body.experienceBn ?? '').trim(),
+      experienceEn: (body.experienceEn ?? '').trim() || (body.experienceBn ?? '').trim(),
+      subjectsBn: Array.isArray(body.subjectsBn) ? body.subjectsBn.filter(Boolean) : [],
+      subjectsEn:
+        Array.isArray(body.subjectsEn) && body.subjectsEn.length > 0
+          ? body.subjectsEn.filter(Boolean)
+          : Array.isArray(body.subjectsBn)
+            ? body.subjectsBn.filter(Boolean)
+            : [],
+      bioBn: (body.bioBn ?? '').trim(),
+      bioEn: (body.bioEn ?? '').trim() || (body.bioBn ?? '').trim(),
+      photoUrl: (body.photoUrl ?? '').trim(),
+    };
+    cms.teachers.push(teacher);
+    writeCmsDatabase(cms);
+    res.status(201).json({ cms, teacher });
+  });
+
+  app.put('/api/admin/teachers/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    const idx = cms.teachers.findIndex((t) => t.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'শিক্ষকের তথ্য পাওয়া যায়নি।' });
+      return;
+    }
+    const body = req.body as Partial<CmsTeacherProfile>;
+    cms.teachers[idx] = { ...cms.teachers[idx], ...body, id: cms.teachers[idx].id };
+    writeCmsDatabase(cms);
+    res.json({ cms, teacher: cms.teachers[idx] });
+  });
+
+  app.delete('/api/admin/teachers/:id', requireAdmin, (req: Request, res: Response) => {
+    const cms = readCmsDatabase();
+    cms.teachers = cms.teachers.filter((t) => t.id !== req.params.id);
+    writeCmsDatabase(cms);
+    res.json({ cms });
+  });
+
+  // Online Admissions Admin View & Management
+  app.get('/api/admin/admissions', requireAdmin, (_req: Request, res: Response) => {
+    const db = readAdmissionsDatabase();
+    res.json({ admissions: db.admissions });
+  });
+
+  app.patch('/api/admin/admissions/:id', requireAdmin, (req: Request, res: Response) => {
+    const db = readAdmissionsDatabase();
+    const idx = db.admissions.findIndex((a) => a.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'আবেদনটি পাওয়া যায়নি।' });
+      return;
+    }
+    const body = req.body as { status?: AdmissionStatus; adminNote?: string };
+    if (body.status && ['pending', 'interview', 'approved', 'rejected'].includes(body.status)) {
+      db.admissions[idx].status = body.status;
+    }
+    if (typeof body.adminNote === 'string') {
+      db.admissions[idx].adminNote = body.adminNote.trim();
+    }
+    writeAdmissionsDatabase(db);
+    res.json({ admission: db.admissions[idx], admissions: db.admissions });
+  });
+
+  app.delete('/api/admin/admissions/:id', requireAdmin, (req: Request, res: Response) => {
+    const db = readAdmissionsDatabase();
+    db.admissions = db.admissions.filter((a) => a.id !== req.params.id);
+    writeAdmissionsDatabase(db);
+    res.json({ admissions: db.admissions });
+  });
+
+  app.post('/api/admin/reset-defaults', requireAdmin, (_req: Request, res: Response) => {
+    const fresh = createDefaultCmsData();
+    writeCmsDatabase(fresh);
+    res.json({ cms: fresh });
+  });
+
+  app.get('/api/admin/ui-config', requireAdmin, (_req: Request, res: Response) => {
+    res.json({ config: readAdminUiConfig() });
+  });
+
+  app.put('/api/admin/ui-config', requireAdmin, (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    if (!body || typeof body !== 'object') {
+      res.status(400).json({ error: 'সঠিক ড্যাশবোর্ড কনফিগারেশন পাঠান।' });
+      return;
+    }
+    writeAdminUiConfig(body);
+    res.json({ config: body });
+  });
+
+  app.post('/api/admin/ui-config/reset', requireAdmin, (_req: Request, res: Response) => {
+    try {
+      if (fs.existsSync(ADMIN_UI_FILE)) {
+        fs.unlinkSync(ADMIN_UI_FILE);
+      }
+    } catch {
+      // ignore
+    }
+    res.json({ config: null });
   });
 
   app.use('/api', (_req: Request, res: Response) => {
