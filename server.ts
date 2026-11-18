@@ -48,7 +48,9 @@ interface StudentDatabase {
 }
 
 const PORT = 3000;
-const DATA_DIR = path.resolve(process.cwd(), '.data');
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', '.data')
+  : path.resolve(process.cwd(), '.data');
 const DB_FILE = path.join(DATA_DIR, 'students.json');
 const CMS_FILE = path.join(DATA_DIR, 'cms.json');
 const ADMISSIONS_FILE = path.join(DATA_DIR, 'admissions.json');
@@ -573,7 +575,7 @@ function getAuthenticatedStudent(req: Request): StoredStudentRecord | null {
   return db.students.find((s) => s.id === studentId) ?? null;
 }
 
-async function startServer() {
+export function createExpressApp() {
   ensureDataDir();
   readOrInitAdminStore();
   readCmsDatabase();
@@ -1328,6 +1330,12 @@ async function startServer() {
     res.status(404).json({ error: 'অনুরোধকৃত API পাওয়া যায়নি।' });
   });
 
+  return app;
+}
+
+async function startServer() {
+  const app = createExpressApp();
+
   // Vite middleware in development / static build in production
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -1349,4 +1357,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  void startServer();
+}

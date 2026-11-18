@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { ChevronDown, Cloud, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
 import type { SiteCmsData } from '../data/cmsTypes';
 import { DEFAULT_CMS_DATA } from '../data/defaultCmsSeed';
 import type { AdmissionSubmission, Department } from '../data/madrasaData';
 import type { Language } from '../data/madrasaTranslations';
+import { auth, googleProvider } from '../firebase';
+import { seedCloudCmsIfEmpty, subscribeToCloudCms } from '../lib/firestoreCms';
 import { AdminDashboard } from './AdminDashboard';
 import { LanguageToggle } from './LanguageToggle';
 import { ReceiptModal } from './ReceiptModal';
@@ -36,6 +39,14 @@ export function StandaloneAdminApp() {
   });
 
   const [cmsData, setCmsData] = useState<SiteCmsData>(DEFAULT_CMS_DATA);
+  const cmsDataRef = useRef<SiteCmsData>(cmsData);
+  cmsDataRef.current = cmsData;
+  const hasCloudCmsRef = useRef(false);
+  const cloudSeedCheckedRef = useRef(false);
+
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
+
   const [adminToken, setAdminToken] = useState<string | null>(() => {
     try {
       return localStorage.getItem('madrasa_admin_token');
@@ -47,12 +58,14 @@ export function StandaloneAdminApp() {
   const [authChecking, setAuthChecking] = useState(Boolean(adminToken));
   const skipNextMeRef = useRef(false);
 
-  // Login form state
+  // Login UI state
+  const [showLegacyLogin, setShowLegacyLogin] = useState(false);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // Receipt modal state for viewing/printing student application receipts
   const [receiptSubmission, setReceiptSubmission] = useState<AdmissionSubmission | null>(null);
@@ -75,11 +88,12 @@ export function StandaloneAdminApp() {
   }, [lang, isEn, cmsData.siteSettings.brandShortBn, cmsData.siteSettings.brandShortEn]);
 
   const loadCms = useCallback(async () => {
+    if (hasCloudCmsRef.current) return;
     try {
       const res = await fetch('/api/cms', { cache: 'no-store' });
       if (!res.ok) return;
       const data = (await res.json()) as { cms?: SiteCmsData };
-      if (data.cms) {
+      if (data.cms && !hasCloudCmsRef.current) {
         setCmsData(data.cms);
       }
     } catch {
@@ -89,11 +103,22 @@ export function StandaloneAdminApp() {
 
   useEffect(() => {
     void loadCms();
+    let unsubscribeCloud: (() => void) | null = null;
+    try {
+      unsubscribeCloud = subscribeToCloudCms((cloudCms) => {
+        hasCloudCmsRef.current = true;
+        setCmsData(cloudCms);
+      });
+    } catch {
+      unsubscribeCloud = null;
+    }
+
     let eventSource: EventSource | null = null;
     try {
       if (typeof EventSource !== 'undefined') {
         eventSource = new EventSource('/api/cms/stream');
         const handleSseCms = (evt: MessageEvent<string>) => {
+          if (hasCloudCmsRef.current) return;
           try {
             const parsed = JSON.parse(evt.data) as { cms?: SiteCmsData };
             if (parsed.cms) {
@@ -109,11 +134,46 @@ export function StandaloneAdminApp() {
       eventSource = null;
     }
     return () => {
+      unsubscribeCloud?.();
       if (eventSource) {
         eventSource.close();
       }
     };
   }, [loadCms]);
+
+  const ensureCloudSeeded = useCallback(async () => {
+    if (cloudSeedCheckedRef.current) return;
+    cloudSeedCheckedRef.current = true;
+    let seedSource = cmsDataRef.current;
+    try {
+      const res = await fetch('/api/cms', { cache: 'no-store' });
+      if (res.ok) {
+        const data = (await res.json()) as { cms?: SiteCmsData };
+        if (data.cms) {
+          seedSource = data.cms;
+        }
+      }
+    } catch {
+      // ignore if local /api/cms unavailable (e.g. cold serverless)
+    }
+    await seedCloudCmsIfEmpty(seedSource).catch(() => {
+      // Non-admin user or rules denial will surface cleanly when editing
+    });
+  }, []);
+
+  // Listen to Firebase Auth state for Cloud Firestore Admin Access
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      setFirebaseReady(true);
+      if (user) {
+        void ensureCloudSeeded();
+      } else {
+        cloudSeedCheckedRef.current = false;
+      }
+    });
+    return () => unsub();
+  }, [ensureCloudSeeded]);
 
   useEffect(() => {
     if (!adminToken) {
@@ -155,6 +215,39 @@ export function StandaloneAdminApp() {
       cancelled = true;
     };
   }, [adminToken]);
+
+  const handleGoogleAdminSignIn = useCallback(async () => {
+    setLoginError('');
+    setGoogleLoading(true);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      if (cred.user) {
+        await ensureCloudSeeded();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('auth/unauthorized-domain')) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        setLoginError(
+          isEn
+            ? `This domain (${host}) needs to be added to Firebase Authentication -> Authorized Domains in Firebase Console, or log in from the AI Studio Admin URL (changes still sync live to Vercel!).`
+            : `এই ডোমেইনটি (${host}) Firebase Console-এর Authentication -> Authorized Domains-এ যোগ করতে হবে, অথবা AI Studio অ্যাডমিন থেকে লগইন করুন (সেখান থেকে পরিবর্তন করলেও Vercel-এ সাথে সাথে আপডেট হবে)।`,
+        );
+      } else if (msg.includes('auth/popup-closed-by-user')) {
+        setLoginError(
+          isEn ? 'Google sign-in popup was closed.' : 'গুগল লগইন পপআপ বন্ধ করা হয়েছে। আবার চেষ্টা করুন।',
+        );
+      } else {
+        setLoginError(
+          isEn
+            ? 'Google sign-in failed. Please verify your admin email.'
+            : 'গুগল লগইন সম্পন্ন হয়নি। আপনার অনুমোদিত অ্যাডমিন ইমেইল দিয়ে চেষ্টা করুন।',
+        );
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [ensureCloudSeeded, isEn]);
 
   const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -215,6 +308,7 @@ export function StandaloneAdminApp() {
     } catch {
       // ignore storage errors
     }
+    void signOut(auth).catch(() => {});
     setAdminToken(null);
     setReceiptSubmission(null);
   }, []);
@@ -244,7 +338,7 @@ export function StandaloneAdminApp() {
     ? cmsData.siteSettings.brandFullEn
     : cmsData.siteSettings.brandFullBn;
 
-  if (authChecking) {
+  if (!firebaseReady || authChecking) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] p-4 text-sm text-[#475569]">
         {isEn ? 'Verifying admin session...' : 'অ্যাডমিন সেশন যাচাই করা হচ্ছে...'}
@@ -252,16 +346,20 @@ export function StandaloneAdminApp() {
     );
   }
 
-  if (adminToken) {
+  const isAuthenticated = Boolean(firebaseUser) || Boolean(adminToken);
+
+  if (isAuthenticated) {
     return (
       <>
         <AdminDashboard
-          adminToken={adminToken}
-          adminUsername={adminUsername}
+          adminToken={adminToken ?? 'firebase-cloud-session'}
+          adminUsername={firebaseUser?.email ?? adminUsername}
+          firebaseAdminEmail={firebaseUser?.email ?? null}
           cmsData={cmsData}
           lang={lang}
           onChangeLang={setLang}
           onCmsUpdated={handleCmsUpdated}
+          onConnectCloudSync={handleGoogleAdminSignIn}
           onViewAdmissionReceipt={(submission) => setReceiptSubmission(submission)}
           openSiteInNewTab
           onLogout={handleLogout}
@@ -311,95 +409,143 @@ export function StandaloneAdminApp() {
             </h1>
             <p className="mt-1 text-xs leading-relaxed text-[#475569]">
               {isEn
-                ? 'Changes saved here are stored in the backend and reflected on the main website.'
-                : 'এখান থেকে করা সকল পরিবর্তন ব্যাকএন্ডে সেভ থাকবে এবং মূল ওয়েবসাইটে তাৎক্ষণিকভাবে প্রদর্শিত হবে।'}
+                ? 'Sign in with Google to save changes directly to Cloud Database — updates appear live on Vercel & all devices.'
+                : 'Google দিয়ে লগইন করলে আপনার সকল পরিবর্তন ক্লাউড ডেটাবেসে সেভ হবে এবং Vercel সহ মূল ওয়েবসাইটে সাথে সাথে পরিবর্তন হবে।'}
             </p>
           </div>
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4 p-6" noValidate>
-            <div className="rounded-lg border border-emerald-200 bg-[#ECFDF5] px-3.5 py-2.5 text-xs text-[#065F46]">
-              <p className="font-semibold">
-                {isEn ? 'Default Admin Access:' : 'ডিফল্ট অ্যাডমিন লগইন তথ্য:'}
-              </p>
-              <p className="mt-0.5 tabular-nums">
-                {isEn ? 'Username:' : 'ইউজারনেম:'}{' '}
-                <span className="font-mono font-bold">admin</span> ·{' '}
-                {isEn ? 'Password:' : 'পাসওয়ার্ড:'}{' '}
-                <span className="font-mono font-bold">madrasa1448</span>
-              </p>
-            </div>
-
+          <div className="space-y-4 p-6">
             {loginError && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700"
+                className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs leading-relaxed font-medium text-red-700"
               >
                 {loginError}
               </div>
             )}
 
-            <div>
-              <label
-                htmlFor="standalone-admin-username"
-                className="block text-sm font-medium text-[#0F172A]"
-              >
-                {isEn ? 'Admin Username' : 'অ্যাডমিন ইউজারনেম'}
-              </label>
-              <input
-                id="standalone-admin-username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                className="mt-1.5 w-full rounded-lg border border-[#CBD5E1] bg-white px-3.5 py-2.5 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="standalone-admin-password"
-                className="block text-sm font-medium text-[#0F172A]"
-              >
-                {isEn ? 'Password' : 'পাসওয়ার্ড'}
-              </label>
-              <div className="relative mt-1.5">
-                <input
-                  id="standalone-admin-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  className="w-full rounded-lg border border-[#CBD5E1] bg-white px-3.5 py-2.5 pr-10 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-[#475569] hover:text-[#0F172A]"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
             <button
-              type="submit"
-              disabled={loginLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#065F46] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-60"
+              type="button"
+              disabled={googleLoading}
+              onClick={handleGoogleAdminSignIn}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#065F46] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-60"
             >
-              <Lock className="h-4 w-4" aria-hidden="true" />
+              <Cloud className="h-4 w-4" aria-hidden="true" />
               <span>
-                {loginLoading
+                {googleLoading
                   ? isEn
-                    ? 'Signing in...'
-                    : 'যাচাই করা হচ্ছে...'
+                    ? 'Connecting Google Cloud Sync...'
+                    : 'ক্লাউড সিঙ্ক চালু হচ্ছে...'
                   : isEn
-                    ? 'Enter Admin Dashboard'
-                    : 'অ্যাডমিন ড্যাশবোর্ডে প্রবেশ করুন'}
+                    ? 'Sign in with Google (Vercel Cloud Sync)'
+                    : 'Google দিয়ে লগইন করুন (Vercel লাইভ সিঙ্ক)'}
               </span>
             </button>
-          </form>
+
+            <div className="rounded-lg border border-emerald-200 bg-[#ECFDF5] px-3.5 py-2.5 text-xs leading-relaxed text-[#065F46]">
+              <p className="font-semibold">
+                {isEn ? 'Live Vercel Synchronization' : 'Vercel ও মূল ওয়েবসাইটে লাইভ সিঙ্ক'}
+              </p>
+              <p className="mt-0.5">
+                {isEn
+                  ? 'All edits made after Google login persist in Cloud Firestore and update Vercel automatically without redeploying.'
+                  : 'Google লগইন করে পরিবর্তন করলে তা ক্লাউড ডেটাবেসে স্থায়ীভাবে সেভ থাকবে এবং আলাদাভাবে রি-ডিপ্লয় ছাড়াই Vercel-এ আপডেট হবে।'}
+              </p>
+            </div>
+
+            <div className="border-t border-[#E2E8F0] pt-3">
+              <button
+                type="button"
+                onClick={() => setShowLegacyLogin((prev) => !prev)}
+                className="flex w-full items-center justify-between text-xs font-medium text-[#475569] hover:text-[#0F172A]"
+              >
+                <span>
+                  {isEn
+                    ? 'Or sign in with local admin password'
+                    : 'অথবা লোকাল পাসওয়ার্ড দিয়ে প্রবেশ করুন'}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${showLegacyLogin ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {showLegacyLogin && (
+                <form onSubmit={handleLoginSubmit} className="mt-4 space-y-3" noValidate>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-[#475569]">
+                    {isEn ? 'Default:' : 'ডিফল্ট:'}{' '}
+                    <span className="font-mono font-semibold text-[#0F172A]">admin</span> /{' '}
+                    <span className="font-mono font-semibold text-[#0F172A]">madrasa1448</span>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="standalone-admin-username"
+                      className="block text-xs font-medium text-[#0F172A]"
+                    >
+                      {isEn ? 'Admin Username' : 'অ্যাডমিন ইউজারনেম'}
+                    </label>
+                    <input
+                      id="standalone-admin-username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete="username"
+                      className="mt-1 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="standalone-admin-password"
+                      className="block text-xs font-medium text-[#0F172A]"
+                    >
+                      {isEn ? 'Password' : 'পাসওয়ার্ড'}
+                    </label>
+                    <div className="relative mt-1">
+                      <input
+                        id="standalone-admin-password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        autoComplete="current-password"
+                        className="w-full rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 pr-10 text-sm text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className="absolute inset-y-0 right-0 flex items-center px-3 text-[#475569] hover:text-[#0F172A]"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loginLoading}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-semibold text-[#0F172A] transition-colors hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>
+                      {loginLoading
+                        ? isEn
+                          ? 'Signing in...'
+                          : 'যাচাই করা হচ্ছে...'
+                        : isEn
+                          ? 'Local Admin Sign In'
+                          : 'লোকাল লগইন'}
+                    </span>
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </div>

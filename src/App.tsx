@@ -57,6 +57,7 @@ import { StudentAuthModal } from './components/StudentAuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdmissionFormModal } from './components/AdmissionFormModal';
 import { LanguageToggle } from './components/LanguageToggle';
+import { cloudSubmitAdmission, subscribeToCloudCms } from './lib/firestoreCms';
 
 type NoticeFilter = 'সকল' | NoticeCategory;
 
@@ -118,8 +119,14 @@ export default function App() {
   }, [lang, activeBrandFull]);
 
   const lastCmsUpdatedAtRef = useRef<string>('');
+  const hasCloudCmsRef = useRef(false);
 
-  const applyCmsSnapshot = useCallback((nextCms: SiteCmsData) => {
+  const applyCmsSnapshot = useCallback((nextCms: SiteCmsData, fromCloud = false) => {
+    if (fromCloud) {
+      hasCloudCmsRef.current = true;
+    } else if (hasCloudCmsRef.current) {
+      return;
+    }
     if (nextCms.updatedAt && nextCms.updatedAt === lastCmsUpdatedAtRef.current) {
       return;
     }
@@ -128,12 +135,13 @@ export default function App() {
   }, []);
 
   const fetchLatestCms = useCallback(async () => {
+    if (hasCloudCmsRef.current) return;
     try {
       const res = await fetch('/api/cms', { cache: 'no-store' });
       if (!res.ok) return;
       const data = (await res.json()) as { cms?: SiteCmsData };
       if (data.cms) {
-        applyCmsSnapshot(data.cms);
+        applyCmsSnapshot(data.cms, false);
       }
     } catch {
       // Fallback smoothly to current/default CMS data if offline
@@ -142,6 +150,16 @@ export default function App() {
 
   useEffect(() => {
     void fetchLatestCms();
+
+    // Primary real-time Cloud Firestore listener (works identically on Vercel, AI Studio, and all devices)
+    let unsubscribeCloud: (() => void) | null = null;
+    try {
+      unsubscribeCloud = subscribeToCloudCms((cloudCms) => {
+        applyCmsSnapshot(cloudCms, true);
+      });
+    } catch {
+      unsubscribeCloud = null;
+    }
 
     const handleFocusOrVisible = () => {
       if (document.visibilityState === 'visible') {
@@ -164,7 +182,7 @@ export default function App() {
         channel = new BroadcastChannel('madrasa_cms_sync');
         channel.onmessage = (event: MessageEvent<{ cms?: SiteCmsData }>) => {
           if (event.data?.cms) {
-            applyCmsSnapshot(event.data.cms);
+            applyCmsSnapshot(event.data.cms, false);
           } else {
             void fetchLatestCms();
           }
@@ -182,7 +200,7 @@ export default function App() {
           try {
             const parsed = JSON.parse(evt.data) as { cms?: SiteCmsData };
             if (parsed.cms) {
-              applyCmsSnapshot(parsed.cms);
+              applyCmsSnapshot(parsed.cms, false);
             }
           } catch {
             // ignore malformed SSE event payload
@@ -195,9 +213,10 @@ export default function App() {
       eventSource = null;
     }
 
-    // Fallback check when tab is visible and SSE is temporarily disconnected
+    // Fallback check when tab is visible and neither cloud nor SSE is active
     const fallbackTimer = window.setInterval(() => {
       if (
+        !hasCloudCmsRef.current &&
         document.visibilityState === 'visible' &&
         (!eventSource || eventSource.readyState !== EventSource.OPEN)
       ) {
@@ -206,6 +225,7 @@ export default function App() {
     }, 8000);
 
     return () => {
+      unsubscribeCloud?.();
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleFocusOrVisible);
       window.removeEventListener('storage', handleStorage);
@@ -635,29 +655,53 @@ export default function App() {
 
     setInlineSubmitting(true);
     try {
-      const response = await fetch('/api/admissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submission),
-      });
-      if (!response.ok) {
-        const errData = (await response.json().catch(() => ({}))) as { error?: string };
-        setInlineSubmitError(
-          errData.error ??
-            (lang === 'en'
-              ? 'Failed to save admission application. Please try again.'
-              : 'ভর্তি আবেদন সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'),
-        );
-        return;
+      let savedInCloud = false;
+      try {
+        await cloudSubmitAdmission({
+          ...submission,
+          id: `adm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          departmentId: submission.departmentId ?? '',
+          classIndex: submission.classIndex ?? 0,
+          residentialKey: submission.residentialKey ?? 'boarding',
+          dateOfBirth: submission.dateOfBirth ?? '',
+          submittedAtIso: now.toISOString(),
+          status: 'pending',
+          adminNote: '',
+        });
+        savedInCloud = true;
+      } catch {
+        // Fallback to server endpoint if cloud submission unavailable
       }
+
+      try {
+        const response = await fetch('/api/admissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submission),
+        });
+        if (!response.ok && !savedInCloud) {
+          const errData = (await response.json().catch(() => ({}))) as { error?: string };
+          setInlineSubmitError(
+            errData.error ??
+              (lang === 'en'
+                ? 'Failed to save admission application. Please try again.'
+                : 'ভর্তি আবেদন সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'),
+          );
+          return;
+        }
+      } catch {
+        if (!savedInCloud) {
+          setInlineSubmitError(
+            lang === 'en'
+              ? 'Network error while saving admission application.'
+              : 'সার্ভারের সাথে সংযোগ করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
+          );
+          return;
+        }
+      }
+
       setLatestSubmission(submission);
       setReceiptModalOpen(true);
-    } catch {
-      setInlineSubmitError(
-        lang === 'en'
-          ? 'Network error while saving admission application.'
-          : 'সার্ভারের সাথে সংযোগ করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
-      );
     } finally {
       setInlineSubmitting(false);
     }

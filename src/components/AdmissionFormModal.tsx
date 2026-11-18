@@ -16,6 +16,7 @@ import {
   type Language,
   type ResidentialKey,
 } from '../data/madrasaTranslations';
+import { cloudSubmitAdmission } from '../lib/firestoreCms';
 
 interface AdmissionFormModalProps {
   isOpen: boolean;
@@ -168,6 +169,22 @@ export function AdmissionFormModal({
 
     setSubmitting(true);
     try {
+      try {
+        await cloudSubmitAdmission({
+          ...submission,
+          id: `adm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          departmentId: submission.departmentId ?? '',
+          classIndex: submission.classIndex ?? 0,
+          residentialKey: submission.residentialKey ?? 'boarding',
+          dateOfBirth: '',
+          submittedAtIso: new Date().toISOString(),
+          status: 'pending',
+          adminNote: '',
+        });
+      } catch {
+        // Fallback to server API below
+      }
+
       const response = await fetch('/api/admissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

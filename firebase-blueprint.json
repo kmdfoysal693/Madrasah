@@ -1,0 +1,288 @@
+{
+  "entities": {
+    "SiteSettingsDoc": {
+      "title": "SiteSettingsDoc",
+      "description": "Global institution branding, logo, contact details, office hours, and footer metadata stored in cms_sections/siteSettings.",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string", "maxLength": 400000 },
+        "brandShortBn": { "type": "string", "maxLength": 200 },
+        "brandShortEn": { "type": "string", "maxLength": 200 },
+        "brandFullBn": { "type": "string", "maxLength": 300 },
+        "brandFullEn": { "type": "string", "maxLength": 300 },
+        "phoneBn": { "type": "string", "maxLength": 80 },
+        "phoneEn": { "type": "string", "maxLength": 80 },
+        "email": { "type": "string", "maxLength": 160 },
+        "addressBn": { "type": "string", "maxLength": 400 },
+        "addressEn": { "type": "string", "maxLength": 400 },
+        "officeDaysBn": { "type": "string", "maxLength": 200 },
+        "officeDaysEn": { "type": "string", "maxLength": 200 },
+        "officeHoursBn": { "type": "string", "maxLength": 200 },
+        "officeHoursEn": { "type": "string", "maxLength": 200 },
+        "interviewHoursBn": { "type": "string", "maxLength": 200 },
+        "interviewHoursEn": { "type": "string", "maxLength": 200 },
+        "holidayNoteBn": { "type": "string", "maxLength": 200 },
+        "holidayNoteEn": { "type": "string", "maxLength": 200 },
+        "footerDescBn": { "type": "string", "maxLength": 1000 },
+        "footerDescEn": { "type": "string", "maxLength": 1000 },
+        "footerRegBn": { "type": "string", "maxLength": 300 },
+        "footerRegEn": { "type": "string", "maxLength": 300 },
+        "copyrightBn": { "type": "string", "maxLength": 300 },
+        "copyrightEn": { "type": "string", "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["brandShortBn", "brandFullBn", "updatedAt"]
+    },
+    "HeroSectionDoc": {
+      "title": "HeroSectionDoc",
+      "description": "Hero texts, stats, and campus slider images stored in cms_sections/heroSection.",
+      "type": "object",
+      "properties": {
+        "welcomeBn": { "type": "string", "maxLength": 300 },
+        "welcomeEn": { "type": "string", "maxLength": 300 },
+        "badgeBn": { "type": "string", "maxLength": 200 },
+        "badgeEn": { "type": "string", "maxLength": 200 },
+        "headlineLine1Bn": { "type": "string", "maxLength": 300 },
+        "headlineLine1En": { "type": "string", "maxLength": 300 },
+        "headlineLine2Bn": { "type": "string", "maxLength": 300 },
+        "headlineLine2En": { "type": "string", "maxLength": 300 },
+        "subtitleBn": { "type": "string", "maxLength": 500 },
+        "subtitleEn": { "type": "string", "maxLength": 500 },
+        "descriptionBn": { "type": "string", "maxLength": 1200 },
+        "descriptionEn": { "type": "string", "maxLength": 1200 },
+        "slides": { "type": "array" },
+        "stats": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["headlineLine1Bn", "slides", "stats", "updatedAt"]
+    },
+    "AboutSectionDoc": {
+      "title": "AboutSectionDoc",
+      "description": "Principal message, photo, library details, and core values stored in cms_sections/aboutSection.",
+      "type": "object",
+      "properties": {
+        "eyebrowBn": { "type": "string", "maxLength": 200 },
+        "eyebrowEn": { "type": "string", "maxLength": 200 },
+        "headingBn": { "type": "string", "maxLength": 300 },
+        "headingEn": { "type": "string", "maxLength": 300 },
+        "quoteBn": { "type": "string", "maxLength": 2000 },
+        "quoteEn": { "type": "string", "maxLength": 2000 },
+        "muhtamimNameBn": { "type": "string", "maxLength": 200 },
+        "muhtamimNameEn": { "type": "string", "maxLength": 200 },
+        "muhtamimTitleBn": { "type": "string", "maxLength": 200 },
+        "muhtamimTitleEn": { "type": "string", "maxLength": 200 },
+        "muhtamimPhotoUrl": { "type": "string", "maxLength": 400000 },
+        "libraryPhotoUrl": { "type": "string", "maxLength": 400000 },
+        "libraryCaptionBn": { "type": "string", "maxLength": 300 },
+        "libraryCaptionEn": { "type": "string", "maxLength": 300 },
+        "coreValues": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["headingBn", "muhtamimNameBn", "coreValues", "updatedAt"]
+    },
+    "CmsDepartment": {
+      "title": "CmsDepartment",
+      "description": "Academic department with bilingual labels, classes, and highlights.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "order": { "type": "number" },
+        "codeBn": { "type": "string", "maxLength": 40 },
+        "codeEn": { "type": "string", "maxLength": 40 },
+        "nameBn": { "type": "string", "maxLength": 200 },
+        "nameEn": { "type": "string", "maxLength": 200 },
+        "subtitleBn": { "type": "string", "maxLength": 300 },
+        "subtitleEn": { "type": "string", "maxLength": 300 },
+        "durationBn": { "type": "string", "maxLength": 100 },
+        "durationEn": { "type": "string", "maxLength": 100 },
+        "ageGroupBn": { "type": "string", "maxLength": 100 },
+        "ageGroupEn": { "type": "string", "maxLength": 100 },
+        "descriptionBn": { "type": "string", "maxLength": 1500 },
+        "descriptionEn": { "type": "string", "maxLength": 1500 },
+        "highlightsBn": { "type": "array" },
+        "highlightsEn": { "type": "array" },
+        "classesBn": { "type": "array" },
+        "classesEn": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nameBn", "classesBn", "classesEn", "updatedAt"]
+    },
+    "CmsNotice": {
+      "title": "CmsNotice",
+      "description": "Published or archived institutional notice.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["active", "archived"] },
+        "category": { "type": "string", "maxLength": 60 },
+        "dateBn": { "type": "string", "maxLength": 100 },
+        "dateEn": { "type": "string", "maxLength": 100 },
+        "hijriDateBn": { "type": "string", "maxLength": 100 },
+        "hijriDateEn": { "type": "string", "maxLength": 100 },
+        "refNumber": { "type": "string", "maxLength": 120 },
+        "titleBn": { "type": "string", "maxLength": 400 },
+        "titleEn": { "type": "string", "maxLength": 400 },
+        "summaryBn": { "type": "string", "maxLength": 1000 },
+        "summaryEn": { "type": "string", "maxLength": 1000 },
+        "fullTextBn": { "type": "array" },
+        "fullTextEn": { "type": "array" },
+        "issuedByBn": { "type": "string", "maxLength": 300 },
+        "issuedByEn": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "maxLength": 80 },
+        "archivedAt": { "type": "string", "maxLength": 80 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "status", "category", "titleBn", "updatedAt"]
+    },
+    "CmsGalleryItem": {
+      "title": "CmsGalleryItem",
+      "description": "Campus gallery photograph and metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "titleBn": { "type": "string", "maxLength": 300 },
+        "titleEn": { "type": "string", "maxLength": 300 },
+        "category": { "type": "string", "maxLength": 80 },
+        "dateBn": { "type": "string", "maxLength": 80 },
+        "dateEn": { "type": "string", "maxLength": 80 },
+        "imageUrl": { "type": "string", "maxLength": 400000 },
+        "createdAtMs": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "titleBn", "imageUrl", "updatedAt"]
+    },
+    "CmsTeacherProfile": {
+      "title": "CmsTeacherProfile",
+      "description": "Faculty/teacher directory entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "order": { "type": "number" },
+        "nameBn": { "type": "string", "maxLength": 200 },
+        "nameEn": { "type": "string", "maxLength": 200 },
+        "designationBn": { "type": "string", "maxLength": 200 },
+        "designationEn": { "type": "string", "maxLength": 200 },
+        "departmentBn": { "type": "string", "maxLength": 200 },
+        "departmentEn": { "type": "string", "maxLength": 200 },
+        "qualificationBn": { "type": "string", "maxLength": 300 },
+        "qualificationEn": { "type": "string", "maxLength": 300 },
+        "experienceBn": { "type": "string", "maxLength": 200 },
+        "experienceEn": { "type": "string", "maxLength": 200 },
+        "subjectsBn": { "type": "array" },
+        "subjectsEn": { "type": "array" },
+        "bioBn": { "type": "string", "maxLength": 1500 },
+        "bioEn": { "type": "string", "maxLength": 1500 },
+        "photoUrl": { "type": "string", "maxLength": 400000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nameBn", "designationBn", "updatedAt"]
+    },
+    "AdmissionRecord": {
+      "title": "AdmissionRecord",
+      "description": "Online student admission application (contains PII; readable and manageable only by admins).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trackingId": { "type": "string", "maxLength": 64 },
+        "submittedAt": { "type": "string", "maxLength": 100 },
+        "submittedAtIso": { "type": "string", "maxLength": 64 },
+        "studentName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "fatherName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "dateOfBirth": { "type": "string", "maxLength": 64 },
+        "department": { "type": "string", "maxLength": 160 },
+        "departmentId": { "type": "string", "maxLength": 128 },
+        "className": { "type": "string", "maxLength": 160 },
+        "classIndex": { "type": "number" },
+        "residentialType": { "type": "string", "maxLength": 120 },
+        "residentialKey": { "type": "string", "enum": ["boarding", "nonBoarding", "dayCare"] },
+        "mobile": { "type": "string", "pattern": "^01[3-9]\\d{8}$", "maxLength": 20 },
+        "address": { "type": "string", "minLength": 4, "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "interview", "approved", "rejected"] },
+        "adminNote": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "trackingId",
+        "studentName",
+        "fatherName",
+        "department",
+        "className",
+        "mobile",
+        "address",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminUiConfig": {
+      "title": "AdminUiConfig",
+      "description": "Admin dashboard theme, titles, and navigation customization settings.",
+      "type": "object",
+      "properties": {
+        "dashboardTitleBn": { "type": "string", "maxLength": 200 },
+        "dashboardTitleEn": { "type": "string", "maxLength": 200 },
+        "welcomeTitleBn": { "type": "string", "maxLength": 300 },
+        "welcomeTitleEn": { "type": "string", "maxLength": 300 },
+        "welcomeSubtitleBn": { "type": "string", "maxLength": 800 },
+        "welcomeSubtitleEn": { "type": "string", "maxLength": 800 },
+        "theme": { "type": "string", "enum": ["emerald", "navy", "amber", "slate"] },
+        "customPrimaryHex": { "type": "string", "maxLength": 20 },
+        "cardRadius": { "type": "string", "enum": ["lg", "xl", "2xl"] },
+        "sidebarCompact": { "type": "boolean" },
+        "showOverviewQuickActions": { "type": "boolean" },
+        "tabOrder": { "type": "array" },
+        "hiddenTabs": { "type": "array" },
+        "customTabLabels": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dashboardTitleBn", "theme", "cardRadius", "updatedAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized admin account entry.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["admin"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/cms_sections/{sectionId}": {
+      "schema": { "$ref": "#/entities/SiteSettingsDoc" },
+      "description": "Public CMS sections (siteSettings, heroSection, aboutSection) readable by all visitors and writable by admins."
+    },
+    "/cms_departments/{deptId}": {
+      "schema": { "$ref": "#/entities/CmsDepartment" },
+      "description": "Academic departments collection readable publicly and editable by admins."
+    },
+    "/cms_notices/{noticeId}": {
+      "schema": { "$ref": "#/entities/CmsNotice" },
+      "description": "Active and archived notices readable publicly and editable by admins."
+    },
+    "/cms_gallery/{itemId}": {
+      "schema": { "$ref": "#/entities/CmsGalleryItem" },
+      "description": "Campus gallery photos readable publicly and editable by admins."
+    },
+    "/cms_teachers/{teacherId}": {
+      "schema": { "$ref": "#/entities/CmsTeacherProfile" },
+      "description": "Teachers directory readable publicly and editable by admins."
+    },
+    "/admissions/{admissionId}": {
+      "schema": { "$ref": "#/entities/AdmissionRecord" },
+      "description": "Online admission records submitted by applicants and managed strictly by admins."
+    },
+    "/admin_ui/{configId}": {
+      "schema": { "$ref": "#/entities/AdminUiConfig" },
+      "description": "Admin dashboard visual customization configuration."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Admin role allowlist."
+    }
+  }
+}

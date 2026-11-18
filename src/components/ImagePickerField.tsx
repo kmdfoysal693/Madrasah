@@ -29,25 +29,31 @@ async function fileToOptimizedDataUrl(file: File): Promise<string> {
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 1400;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
+        const tryEncode = (maxDim: number, quality: number, mime: 'image/png' | 'image/jpeg') => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            const ratio = Math.min(maxDim / width, maxDim / height);
+            width = Math.max(1, Math.round(width * ratio));
+            height = Math.max(1, Math.round(height * ratio));
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return String(reader.result ?? '');
+          ctx.drawImage(img, 0, 0, width, height);
+          return canvas.toDataURL(mime, quality);
+        };
+
+        const preferPng = file.type === 'image/png' && file.size < 250_000;
+        let result = tryEncode(1100, 0.8, preferPng ? 'image/png' : 'image/jpeg');
+        if (result.length > 260_000) {
+          result = tryEncode(900, 0.72, 'image/jpeg');
         }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(String(reader.result ?? ''));
-          return;
+        if (result.length > 260_000) {
+          result = tryEncode(720, 0.62, 'image/jpeg');
         }
-        ctx.drawImage(img, 0, 0, width, height);
-        const keepPng = file.type === 'image/png' || file.type === 'image/webp';
-        const outputMime = keepPng ? 'image/png' : 'image/jpeg';
-        resolve(canvas.toDataURL(outputMime, 0.86));
+        resolve(result);
       };
       img.onerror = () => reject(new Error('Invalid image format'));
       img.src = String(reader.result ?? '');
@@ -60,7 +66,7 @@ export function ImagePickerField({
   label,
   value,
   onChange,
-  adminToken,
+  adminToken: _adminToken,
   lang,
   placeholder,
   allowClear = false,
@@ -88,27 +94,19 @@ export function ImagePickerField({
     setUploading(true);
     try {
       const dataUrl = await fileToOptimizedDataUrl(file);
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
-        },
-        body: JSON.stringify({ filename: file.name, dataUrl }),
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
+      if (dataUrl.length > 380_000) {
         onError?.(
-          data.error ??
-            (isEn ? 'Image upload failed.' : 'ছবি আপলোড করা যায়নি। আবার চেষ্টা করুন।'),
+          isEn
+            ? 'Image is too large even after compression. Please choose a smaller photo.'
+            : 'ছবিটি অনেক বড়। অনুগ্রহ করে অপেক্ষাকৃত ছোট ছবি নির্বাচন করুন।',
         );
         return;
       }
       setPreviewFailed(false);
-      onChange(data.url);
+      onChange(dataUrl);
     } catch {
       onError?.(
-        isEn ? 'Image upload error occurred.' : 'ছবি আপলোডের সময় সমস্যা হয়েছে।',
+        isEn ? 'Image processing error occurred.' : 'ছবি প্রসেসিংয়ের সময় সমস্যা হয়েছে।',
       );
     } finally {
       setUploading(false);

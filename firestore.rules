@@ -1,0 +1,399 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny all unspecified reads/writes by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Identity & Primitive Helpers
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOptStr(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'kmdfoysal693@gmail.com'
+      );
+    }
+
+    // Entity Validation Helpers (Blueprint Synchronized)
+    function isValidSiteSettings(data) {
+      return data.keys().hasAll(['brandShortBn', 'brandFullBn', 'updatedAt'])
+        && data.keys().hasOnly([
+          'logoUrl', 'brandShortBn', 'brandShortEn', 'brandFullBn', 'brandFullEn',
+          'phoneBn', 'phoneEn', 'email', 'addressBn', 'addressEn',
+          'officeDaysBn', 'officeDaysEn', 'officeHoursBn', 'officeHoursEn',
+          'interviewHoursBn', 'interviewHoursEn', 'holidayNoteBn', 'holidayNoteEn',
+          'footerDescBn', 'footerDescEn', 'footerRegBn', 'footerRegEn',
+          'copyrightBn', 'copyrightEn', 'updatedAt'
+        ])
+        && isOptStr(data, 'logoUrl', 400000)
+        && isStr(data.brandShortBn, 1, 200)
+        && isOptStr(data, 'brandShortEn', 200)
+        && isStr(data.brandFullBn, 1, 300)
+        && isOptStr(data, 'brandFullEn', 300)
+        && isOptStr(data, 'phoneBn', 80)
+        && isOptStr(data, 'phoneEn', 80)
+        && isOptStr(data, 'email', 160)
+        && isOptStr(data, 'addressBn', 400)
+        && isOptStr(data, 'addressEn', 400)
+        && isOptStr(data, 'officeDaysBn', 200)
+        && isOptStr(data, 'officeDaysEn', 200)
+        && isOptStr(data, 'officeHoursBn', 200)
+        && isOptStr(data, 'officeHoursEn', 200)
+        && isOptStr(data, 'interviewHoursBn', 200)
+        && isOptStr(data, 'interviewHoursEn', 200)
+        && isOptStr(data, 'holidayNoteBn', 200)
+        && isOptStr(data, 'holidayNoteEn', 200)
+        && isOptStr(data, 'footerDescBn', 1000)
+        && isOptStr(data, 'footerDescEn', 1000)
+        && isOptStr(data, 'footerRegBn', 300)
+        && isOptStr(data, 'footerRegEn', 300)
+        && isOptStr(data, 'copyrightBn', 300)
+        && isOptStr(data, 'copyrightEn', 300)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidHeroSection(data) {
+      return data.keys().hasAll(['headlineLine1Bn', 'slides', 'stats', 'updatedAt'])
+        && data.keys().hasOnly([
+          'welcomeBn', 'welcomeEn', 'badgeBn', 'badgeEn',
+          'headlineLine1Bn', 'headlineLine1En', 'headlineLine2Bn', 'headlineLine2En',
+          'subtitleBn', 'subtitleEn', 'descriptionBn', 'descriptionEn',
+          'slides', 'stats', 'updatedAt'
+        ])
+        && isOptStr(data, 'welcomeBn', 300)
+        && isOptStr(data, 'welcomeEn', 300)
+        && isOptStr(data, 'badgeBn', 200)
+        && isOptStr(data, 'badgeEn', 200)
+        && isStr(data.headlineLine1Bn, 1, 300)
+        && isOptStr(data, 'headlineLine1En', 300)
+        && isOptStr(data, 'headlineLine2Bn', 300)
+        && isOptStr(data, 'headlineLine2En', 300)
+        && isOptStr(data, 'subtitleBn', 500)
+        && isOptStr(data, 'subtitleEn', 500)
+        && isOptStr(data, 'descriptionBn', 1200)
+        && isOptStr(data, 'descriptionEn', 1200)
+        && data.slides is list && data.slides.size() >= 1 && data.slides.size() <= 12 && data.slides[0] is map
+        && data.stats is list && data.stats.size() <= 8 && (data.stats.size() == 0 || data.stats[0] is map)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidAboutSection(data) {
+      return data.keys().hasAll(['headingBn', 'muhtamimNameBn', 'coreValues', 'updatedAt'])
+        && data.keys().hasOnly([
+          'eyebrowBn', 'eyebrowEn', 'headingBn', 'headingEn',
+          'quoteBn', 'quoteEn', 'muhtamimNameBn', 'muhtamimNameEn',
+          'muhtamimTitleBn', 'muhtamimTitleEn', 'muhtamimPhotoUrl',
+          'libraryPhotoUrl', 'libraryCaptionBn', 'libraryCaptionEn',
+          'coreValues', 'updatedAt'
+        ])
+        && isOptStr(data, 'eyebrowBn', 200)
+        && isOptStr(data, 'eyebrowEn', 200)
+        && isStr(data.headingBn, 1, 300)
+        && isOptStr(data, 'headingEn', 300)
+        && isOptStr(data, 'quoteBn', 2000)
+        && isOptStr(data, 'quoteEn', 2000)
+        && isStr(data.muhtamimNameBn, 1, 200)
+        && isOptStr(data, 'muhtamimNameEn', 200)
+        && isOptStr(data, 'muhtamimTitleBn', 200)
+        && isOptStr(data, 'muhtamimTitleEn', 200)
+        && isOptStr(data, 'muhtamimPhotoUrl', 400000)
+        && isOptStr(data, 'libraryPhotoUrl', 400000)
+        && isOptStr(data, 'libraryCaptionBn', 300)
+        && isOptStr(data, 'libraryCaptionEn', 300)
+        && data.coreValues is list && data.coreValues.size() <= 8 && (data.coreValues.size() == 0 || data.coreValues[0] is map)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidDepartment(data, deptId) {
+      return data.keys().hasAll(['id', 'nameBn', 'classesBn', 'classesEn', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'order', 'codeBn', 'codeEn', 'nameBn', 'nameEn',
+          'subtitleBn', 'subtitleEn', 'durationBn', 'durationEn',
+          'ageGroupBn', 'ageGroupEn', 'descriptionBn', 'descriptionEn',
+          'highlightsBn', 'highlightsEn', 'classesBn', 'classesEn', 'updatedAt'
+        ])
+        && data.id == deptId
+        && isValidId(data.id)
+        && (!('order' in data) || data.order is number)
+        && isOptStr(data, 'codeBn', 40)
+        && isOptStr(data, 'codeEn', 40)
+        && isStr(data.nameBn, 1, 200)
+        && isOptStr(data, 'nameEn', 200)
+        && isOptStr(data, 'subtitleBn', 300)
+        && isOptStr(data, 'subtitleEn', 300)
+        && isOptStr(data, 'durationBn', 100)
+        && isOptStr(data, 'durationEn', 100)
+        && isOptStr(data, 'ageGroupBn', 100)
+        && isOptStr(data, 'ageGroupEn', 100)
+        && isOptStr(data, 'descriptionBn', 1500)
+        && isOptStr(data, 'descriptionEn', 1500)
+        && (!('highlightsBn' in data) || (data.highlightsBn is list && data.highlightsBn.size() <= 20 && (data.highlightsBn.size() == 0 || data.highlightsBn[0] is string)))
+        && (!('highlightsEn' in data) || (data.highlightsEn is list && data.highlightsEn.size() <= 20 && (data.highlightsEn.size() == 0 || data.highlightsEn[0] is string)))
+        && data.classesBn is list && data.classesBn.size() >= 1 && data.classesBn.size() <= 25 && data.classesBn[0] is string
+        && data.classesEn is list && data.classesEn.size() >= 1 && data.classesEn.size() <= 25 && data.classesEn[0] is string
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidNotice(data, noticeId) {
+      return data.keys().hasAll(['id', 'status', 'category', 'titleBn', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'status', 'category', 'dateBn', 'dateEn',
+          'hijriDateBn', 'hijriDateEn', 'refNumber', 'titleBn', 'titleEn',
+          'summaryBn', 'summaryEn', 'fullTextBn', 'fullTextEn',
+          'issuedByBn', 'issuedByEn', 'createdAt', 'archivedAt', 'updatedAt'
+        ])
+        && data.id == noticeId
+        && isValidId(data.id)
+        && data.status in ['active', 'archived']
+        && isStr(data.category, 1, 60)
+        && isOptStr(data, 'dateBn', 100)
+        && isOptStr(data, 'dateEn', 100)
+        && isOptStr(data, 'hijriDateBn', 100)
+        && isOptStr(data, 'hijriDateEn', 100)
+        && isOptStr(data, 'refNumber', 120)
+        && isStr(data.titleBn, 1, 400)
+        && isOptStr(data, 'titleEn', 400)
+        && isOptStr(data, 'summaryBn', 1000)
+        && isOptStr(data, 'summaryEn', 1000)
+        && (!('fullTextBn' in data) || (data.fullTextBn is list && data.fullTextBn.size() <= 40 && (data.fullTextBn.size() == 0 || data.fullTextBn[0] is string)))
+        && (!('fullTextEn' in data) || (data.fullTextEn is list && data.fullTextEn.size() <= 40 && (data.fullTextEn.size() == 0 || data.fullTextEn[0] is string)))
+        && isOptStr(data, 'issuedByBn', 300)
+        && isOptStr(data, 'issuedByEn', 300)
+        && isOptStr(data, 'createdAt', 80)
+        && isOptStr(data, 'archivedAt', 80)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidGalleryItem(data, itemId) {
+      return data.keys().hasAll(['id', 'titleBn', 'imageUrl', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'titleBn', 'titleEn', 'category', 'dateBn', 'dateEn',
+          'imageUrl', 'createdAtMs', 'updatedAt'
+        ])
+        && data.id == itemId
+        && isValidId(data.id)
+        && isStr(data.titleBn, 1, 300)
+        && isOptStr(data, 'titleEn', 300)
+        && isOptStr(data, 'category', 80)
+        && isOptStr(data, 'dateBn', 80)
+        && isOptStr(data, 'dateEn', 80)
+        && isStr(data.imageUrl, 1, 400000)
+        && (!('createdAtMs' in data) || data.createdAtMs is number)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidTeacher(data, teacherId) {
+      return data.keys().hasAll(['id', 'nameBn', 'designationBn', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'order', 'nameBn', 'nameEn', 'designationBn', 'designationEn',
+          'departmentBn', 'departmentEn', 'qualificationBn', 'qualificationEn',
+          'experienceBn', 'experienceEn', 'subjectsBn', 'subjectsEn',
+          'bioBn', 'bioEn', 'photoUrl', 'updatedAt'
+        ])
+        && data.id == teacherId
+        && isValidId(data.id)
+        && (!('order' in data) || data.order is number)
+        && isStr(data.nameBn, 1, 200)
+        && isOptStr(data, 'nameEn', 200)
+        && isStr(data.designationBn, 1, 200)
+        && isOptStr(data, 'designationEn', 200)
+        && isOptStr(data, 'departmentBn', 200)
+        && isOptStr(data, 'departmentEn', 200)
+        && isOptStr(data, 'qualificationBn', 300)
+        && isOptStr(data, 'qualificationEn', 300)
+        && isOptStr(data, 'experienceBn', 200)
+        && isOptStr(data, 'experienceEn', 200)
+        && (!('subjectsBn' in data) || (data.subjectsBn is list && data.subjectsBn.size() <= 20 && (data.subjectsBn.size() == 0 || data.subjectsBn[0] is string)))
+        && (!('subjectsEn' in data) || (data.subjectsEn is list && data.subjectsEn.size() <= 20 && (data.subjectsEn.size() == 0 || data.subjectsEn[0] is string)))
+        && isOptStr(data, 'bioBn', 1500)
+        && isOptStr(data, 'bioEn', 1500)
+        && isOptStr(data, 'photoUrl', 400000)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidAdmission(data, admissionId) {
+      return data.keys().hasAll([
+          'id', 'trackingId', 'studentName', 'fatherName', 'department',
+          'className', 'mobile', 'address', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trackingId', 'submittedAt', 'submittedAtIso', 'studentName',
+          'fatherName', 'dateOfBirth', 'department', 'departmentId', 'className',
+          'classIndex', 'residentialType', 'residentialKey', 'mobile', 'address',
+          'status', 'adminNote', 'createdAt', 'updatedAt'
+        ])
+        && data.id == admissionId
+        && isValidId(data.id)
+        && isStr(data.trackingId, 4, 64)
+        && isOptStr(data, 'submittedAt', 100)
+        && isOptStr(data, 'submittedAtIso', 64)
+        && isStr(data.studentName, 2, 160)
+        && isStr(data.fatherName, 2, 160)
+        && isOptStr(data, 'dateOfBirth', 64)
+        && isStr(data.department, 1, 160)
+        && isOptStr(data, 'departmentId', 128)
+        && isStr(data.className, 1, 160)
+        && (!('classIndex' in data) || (data.classIndex is number && data.classIndex >= 0 && data.classIndex <= 30))
+        && isOptStr(data, 'residentialType', 120)
+        && (!('residentialKey' in data) || data.residentialKey in ['boarding', 'non_residential', 'day_care', 'nonBoarding', 'dayCare'])
+        && isStr(data.mobile, 11, 20) && data.mobile.matches('^01[3-9][0-9]{8}$')
+        && isStr(data.address, 4, 500)
+        && data.status in ['pending', 'interview', 'approved', 'rejected']
+        && isOptStr(data, 'adminNote', 1000)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminUiConfig(data) {
+      return data.keys().hasAll(['dashboardTitleBn', 'theme', 'cardRadius', 'updatedAt'])
+        && data.keys().hasOnly([
+          'dashboardTitleBn', 'dashboardTitleEn', 'welcomeTitleBn', 'welcomeTitleEn',
+          'welcomeSubtitleBn', 'welcomeSubtitleEn', 'theme', 'customPrimaryHex',
+          'cardRadius', 'sidebarCompact', 'showOverviewQuickActions',
+          'tabOrder', 'hiddenTabs', 'customTabLabels', 'updatedAt'
+        ])
+        && isStr(data.dashboardTitleBn, 1, 200)
+        && isOptStr(data, 'dashboardTitleEn', 200)
+        && isOptStr(data, 'welcomeTitleBn', 300)
+        && isOptStr(data, 'welcomeTitleEn', 300)
+        && isOptStr(data, 'welcomeSubtitleBn', 800)
+        && isOptStr(data, 'welcomeSubtitleEn', 800)
+        && data.theme in ['emerald', 'navy', 'amber', 'slate']
+        && isOptStr(data, 'customPrimaryHex', 20)
+        && data.cardRadius in ['lg', 'xl', '2xl']
+        && (!('sidebarCompact' in data) || data.sidebarCompact is bool)
+        && (!('showOverviewQuickActions' in data) || data.showOverviewQuickActions is bool)
+        && (!('tabOrder' in data) || (data.tabOrder is list && data.tabOrder.size() <= 20 && (data.tabOrder.size() == 0 || data.tabOrder[0] is string)))
+        && (!('hiddenTabs' in data) || (data.hiddenTabs is list && data.hiddenTabs.size() <= 20 && (data.hiddenTabs.size() == 0 || data.hiddenTabs[0] is string)))
+        && (!('customTabLabels' in data) || data.customTabLabels is map)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['email', 'role', 'updatedAt'])
+        && data.keys().hasOnly(['email', 'role', 'updatedAt'])
+        && isStr(data.email, 3, 200)
+        && data.role == 'admin'
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    // 1. Public CMS Sections (siteSettings, heroSection, aboutSection)
+    match /cms_sections/{sectionId} {
+      allow get: if isValidId(sectionId);
+      allow list: if true;
+      allow create, update: if isAdmin() && isValidId(sectionId) && (
+        (sectionId == 'siteSettings' && isValidSiteSettings(incoming())) ||
+        (sectionId == 'heroSection' && isValidHeroSection(incoming())) ||
+        (sectionId == 'aboutSection' && isValidAboutSection(incoming()))
+      );
+      allow delete: if isAdmin() && isValidId(sectionId);
+    }
+
+    // 2. Public CMS Collections
+    match /cms_departments/{deptId} {
+      allow get: if isValidId(deptId);
+      allow list: if true;
+      allow create, update: if isAdmin() && isValidId(deptId) && isValidDepartment(incoming(), deptId);
+      allow delete: if isAdmin() && isValidId(deptId);
+    }
+
+    match /cms_notices/{noticeId} {
+      allow get: if isValidId(noticeId);
+      allow list: if true;
+      allow create, update: if isAdmin() && isValidId(noticeId) && isValidNotice(incoming(), noticeId);
+      allow delete: if isAdmin() && isValidId(noticeId);
+    }
+
+    match /cms_gallery/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create, update: if isAdmin() && isValidId(itemId) && isValidGalleryItem(incoming(), itemId);
+      allow delete: if isAdmin() && isValidId(itemId);
+    }
+
+    match /cms_teachers/{teacherId} {
+      allow get: if isValidId(teacherId);
+      allow list: if true;
+      allow create, update: if isAdmin() && isValidId(teacherId) && isValidTeacher(incoming(), teacherId);
+      allow delete: if isAdmin() && isValidId(teacherId);
+    }
+
+    // 3. Student Admission Applications (PII Isolated: Admin-only read/update/delete, strict public create)
+    match /admissions/{admissionId} {
+      allow get: if isAdmin() && isValidId(admissionId);
+      allow list: if isAdmin();
+      allow create: if isValidId(admissionId)
+        && isValidAdmission(incoming(), admissionId)
+        && incoming().status == 'pending'
+        && (!('adminNote' in incoming()) || incoming().adminNote == '')
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(admissionId)
+        && isValidAdmission(incoming(), admissionId)
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(admissionId);
+    }
+
+    // 4. Admin Dashboard Customization Config
+    match /admin_ui/{configId} {
+      allow get: if isAdmin() && isValidId(configId);
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(configId) && isValidAdminUiConfig(incoming());
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    // 5. Admin Allowlist
+    match /admins/{uid} {
+      allow get: if isVerifiedUser() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(uid) && isValidAdminUser(incoming());
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // 6. Connection check doc
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+    }
+  }
+}
