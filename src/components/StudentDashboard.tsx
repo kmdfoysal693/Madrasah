@@ -14,6 +14,7 @@ import {
   Printer,
 } from 'lucide-react';
 import {
+  MAX_NOTICES,
   NOTICES,
   type NoticeCategory,
   type NoticeItem,
@@ -33,8 +34,6 @@ import { NoticeModal } from './NoticeModal';
 interface StudentDashboardProps {
   token: string;
   lang: Language;
-  notices?: NoticeItem[];
-  brandShort?: string;
   onChangeLang: (lang: Language) => void;
   onBackToSite: () => void;
   onLogout: () => void;
@@ -45,8 +44,6 @@ type DashboardSection = 'overview' | 'notices' | 'tuition' | 'routine' | 'result
 export function StudentDashboard({
   token,
   lang,
-  notices,
-  brandShort,
   onChangeLang,
   onBackToSite,
   onLogout,
@@ -75,8 +72,8 @@ export function StudentDashboard({
   ];
 
   const allNotices: NoticeItem[] = useMemo(
-    () => (notices && notices.length > 0 ? notices : lang === 'en' ? NOTICES_EN : NOTICES),
-    [notices, lang],
+    () => (lang === 'en' ? NOTICES_EN : NOTICES),
+    [lang],
   );
 
   const selectedNotice = useMemo(
@@ -147,9 +144,11 @@ export function StudentDashboard({
   }, [payload]);
 
   const filteredNotices = useMemo(() => {
-    return noticeFilter === 'সকল'
-      ? allNotices
-      : allNotices.filter((n) => n.category === noticeFilter);
+    const list =
+      noticeFilter === 'সকল'
+        ? allNotices
+        : allNotices.filter((n) => n.category === noticeFilter);
+    return list.slice(0, MAX_NOTICES);
   }, [allNotices, noticeFilter]);
 
   const activeResultTerm = useMemo(() => {
@@ -266,11 +265,7 @@ export function StudentDashboard({
             <GraduationCap className="h-6 w-6 shrink-0 text-[#065F46]" aria-hidden="true" />
             <div className="min-w-0">
               <p className="truncate font-serif text-sm font-bold text-[#0F172A] sm:text-base">
-                {brandShort
-                  ? lang === 'en'
-                    ? `${brandShort} · Student Dashboard`
-                    : `${brandShort} · ছাত্র ড্যাশবোর্ড`
-                  : d.headerTitle}
+                {d.headerTitle}
               </p>
               <p className="truncate text-xs text-[#475569] tabular-nums">
                 {student.name} · {d.idPrefix} {student.studentRoll}

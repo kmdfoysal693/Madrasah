@@ -7,7 +7,6 @@ import {
   normalizeMobileNumber,
   toBengaliDigits,
   type AdmissionSubmission,
-  type Department,
 } from '../data/madrasaData';
 import {
   DEPARTMENTS_EN,
@@ -16,13 +15,10 @@ import {
   type Language,
   type ResidentialKey,
 } from '../data/madrasaTranslations';
-import { cloudSubmitAdmission } from '../lib/firestoreCms';
 
 interface AdmissionFormModalProps {
   isOpen: boolean;
   initialDepartmentId?: string;
-  departments?: Department[];
-  bnDepartments?: Department[];
   lang: Language;
   onClose: () => void;
   onSubmitted: (submission: AdmissionSubmission) => void;
@@ -40,33 +36,21 @@ interface ModalFormErrors {
 export function AdmissionFormModal({
   isOpen,
   initialDepartmentId,
-  departments,
-  bnDepartments,
   lang,
   onClose,
   onSubmitted,
 }: AdmissionFormModalProps) {
   const copy = UI_COPY[lang];
-  const activeDepartments = useMemo(
-    () => (departments && departments.length > 0 ? departments : lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS),
-    [departments, lang],
-  );
-  const canonicalBnDepartments = useMemo(
-    () => (bnDepartments && bnDepartments.length > 0 ? bnDepartments : DEPARTMENTS),
-    [bnDepartments],
-  );
+  const activeDepartments = lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS;
 
   const [studentName, setStudentName] = useState('');
   const [fatherName, setFatherName] = useState('');
-  const [departmentId, setDepartmentId] = useState(
-    initialDepartmentId || activeDepartments[0]?.id || DEPARTMENTS[0].id,
-  );
+  const [departmentId, setDepartmentId] = useState(initialDepartmentId || DEPARTMENTS[0].id);
   const [classIndex, setClassIndex] = useState(0);
   const [residentialKey, setResidentialKey] = useState<ResidentialKey>('boarding');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<ModalFormErrors>({});
-  const [submitting, setSubmitting] = useState(false);
 
   const selectedDept = useMemo(
     () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
@@ -76,9 +60,9 @@ export function AdmissionFormModal({
   useEffect(() => {
     if (!isOpen) return;
     setErrors({});
-    setDepartmentId(initialDepartmentId || activeDepartments[0]?.id || DEPARTMENTS[0].id);
+    setDepartmentId(initialDepartmentId || DEPARTMENTS[0].id);
     setClassIndex(0);
-  }, [activeDepartments, initialDepartmentId, isOpen]);
+  }, [initialDepartmentId, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -101,9 +85,8 @@ export function AdmissionFormModal({
     }
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (submitting) return;
     const nextErrors: ModalFormErrors = {};
 
     if (!studentName.trim() || studentName.trim().length < 2) {
@@ -147,8 +130,7 @@ export function AdmissionFormModal({
           : toBengaliDigits(new Date().toLocaleString('en-GB'));
     }
 
-    const bnDept =
-      canonicalBnDepartments.find((d) => d.id === selectedDept.id) ?? selectedDept;
+    const bnDept = DEPARTMENTS.find((d) => d.id === selectedDept.id) ?? DEPARTMENTS[0];
     const resObj =
       RESIDENTIAL_OPTIONS.find((r) => r.key === residentialKey) ?? RESIDENTIAL_OPTIONS[0];
 
@@ -159,48 +141,13 @@ export function AdmissionFormModal({
       fatherName: fatherName.trim(),
       department: bnDept.name,
       departmentId: selectedDept.id,
-      className: bnDept.classes[classIndex] ?? bnDept.classes[0] ?? selectedDept.classes[0],
+      className: bnDept.classes[classIndex] ?? bnDept.classes[0],
       classIndex,
       residentialType: resObj.bn,
       residentialKey,
       mobile: cleanMobile,
       address: address.trim(),
     };
-
-    setSubmitting(true);
-    try {
-      try {
-        await cloudSubmitAdmission({
-          ...submission,
-          id: `adm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          departmentId: submission.departmentId ?? '',
-          classIndex: submission.classIndex ?? 0,
-          residentialKey: submission.residentialKey ?? 'boarding',
-          dateOfBirth: '',
-          submittedAtIso: new Date().toISOString(),
-          status: 'pending',
-          adminNote: '',
-        });
-      } catch {
-        // Fallback to server API below
-      }
-
-      const response = await fetch('/api/admissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submission),
-      });
-      if (response.ok) {
-        const data = (await response.json()) as { admission?: AdmissionSubmission };
-        if (data.admission?.trackingId) {
-          submission.trackingId = data.admission.trackingId;
-        }
-      }
-    } catch {
-      // Keep client flow resilient if offline
-    } finally {
-      setSubmitting(false);
-    }
 
     setErrors({});
     setStudentName('');
@@ -451,14 +398,9 @@ export function AdmissionFormModal({
           <div className="pt-2">
             <button
               type="submit"
-              disabled={submitting}
-              className="flex w-full items-center justify-center rounded-xl bg-[#065F46] px-6 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] disabled:opacity-60"
+              className="flex w-full items-center justify-center rounded-xl bg-[#065F46] px-6 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46]"
             >
-              {submitting
-                ? lang === 'en'
-                  ? 'Submitting...'
-                  : 'আবেদন জমা হচ্ছে...'
-                : copy.popupSubmit}
+              {copy.popupSubmit}
             </button>
           </div>
         </form>

@@ -9,12 +9,11 @@ import {
 
 interface NoticeModalProps {
   notice: NoticeItem | null;
-  institutionLine?: string;
   lang: Language;
   onClose: () => void;
 }
 
-export function NoticeModal({ notice, institutionLine, lang, onClose }: NoticeModalProps) {
+export function NoticeModal({ notice, lang, onClose }: NoticeModalProps) {
   const copy = UI_COPY[lang];
 
   useEffect(() => {
@@ -85,9 +84,7 @@ export function NoticeModal({ notice, institutionLine, lang, onClose }: NoticeMo
           <div className="mt-8 border-t border-[#E2E8F0] pt-5">
             <p className="text-xs text-[#475569]">{copy.noticeByOrder}</p>
             <p className="mt-1 text-sm font-semibold text-[#0F172A]">{notice.issuedBy}</p>
-            <p className="mt-0.5 text-xs text-[#475569]">
-              {institutionLine || copy.noticeInstitutionLine}
-            </p>
+            <p className="mt-0.5 text-xs text-[#475569]">{copy.noticeInstitutionLine}</p>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { CheckCircle2, Printer, RotateCcw, X } from 'lucide-react';
-import { DEPARTMENTS, type AdmissionSubmission, type Department } from '../data/madrasaData';
+import { DEPARTMENTS, type AdmissionSubmission } from '../data/madrasaData';
 import {
   DEPARTMENTS_EN,
   formatDigits,
@@ -11,8 +11,6 @@ import {
 
 interface ReceiptModalProps {
   submission: AdmissionSubmission | null;
-  departments?: Department[];
-  brandFull?: string;
   lang: Language;
   onClose: () => void;
   onNewApplication: () => void;
@@ -20,8 +18,6 @@ interface ReceiptModalProps {
 
 export function ReceiptModal({
   submission,
-  departments,
-  brandFull,
   lang,
   onClose,
   onNewApplication,
@@ -48,12 +44,7 @@ export function ReceiptModal({
     return formatDigits(`${day}/${month}/${year}`, lang);
   };
 
-  const deptList =
-    departments && departments.length > 0
-      ? departments
-      : lang === 'en'
-        ? DEPARTMENTS_EN
-        : DEPARTMENTS;
+  const deptList = lang === 'en' ? DEPARTMENTS_EN : DEPARTMENTS;
   const matchedDept = submission.departmentId
     ? deptList.find((d) => d.id === submission.departmentId)
     : undefined;
@@ -101,7 +92,7 @@ export function ReceiptModal({
             id="receipt-modal-title"
             className="mt-1 font-serif text-xl font-bold text-[#0F172A] sm:text-2xl"
           >
-            {brandFull || copy.brandFull}
+            {copy.brandFull}
           </h3>
           <p className="mt-1 text-xs text-[#475569]">{copy.receiptSubtitle}</p>
         </div>
