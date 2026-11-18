@@ -407,11 +407,11 @@ export default function App() {
               ·
             </span>
             <a
-              href="mailto:info@aljamiatul-madrasa.edu.bd"
+              href="mailto:info@darussalam-madrasa.edu.bd"
               className="inline-flex items-center gap-1.5 transition-colors hover:text-[#065F46] whitespace-nowrap"
             >
               <Mail className="h-3.5 w-3.5 text-[#065F46]" aria-hidden="true" />
-              <span>info@aljamiatul-madrasa.edu.bd</span>
+              <span>info@darussalam-madrasa.edu.bd</span>
             </a>
           </div>
 
@@ -446,7 +446,8 @@ export default function App() {
           {/* Zone 1: Brand Mark & Wordmark */}
           <a
             href="#home"
-            className="flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46]"
+            title={copy.brandFull}
+            className="flex min-w-0 items-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#065F46]"
           >
             <svg
               width="28"
@@ -479,7 +480,7 @@ export default function App() {
                 strokeLinecap="round"
               />
             </svg>
-            <span className="font-serif text-sm font-bold tracking-tight text-[#0F172A] sm:text-base xl:text-lg">
+            <span className="max-w-[185px] truncate font-serif text-sm font-bold tracking-tight text-[#0F172A] sm:max-w-[300px] sm:text-[15px] lg:max-w-[205px] xl:max-w-none xl:text-base">
               {copy.brandShort}
             </span>
           </a>
@@ -922,14 +923,14 @@ export default function App() {
                     {copy.aboutQuote}
                   </blockquote>
                   <div className="mt-5 flex items-center gap-3.5 text-sm">
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-[#E2E8F0] bg-[#F8FAFC]">
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full border border-[#E2E8F0] bg-[#F8FAFC]">
                       {!muhtamimImgFailed ? (
                         <img
-                          src="/src/assets/images/teacher_muhtamim_1794936349561.jpg"
-                          alt={copy.aboutMuhtamimTitle}
+                          src="/assets/aistudio/beb6c739-6282-4e3a-b0eb-f53f4e608df7_aad8bb44.jfif"
+                          alt={copy.aboutMuhtamimName}
                           referrerPolicy="no-referrer"
                           onError={() => setMuhtamimImgFailed(true)}
-                          className="h-full w-full object-cover object-top"
+                          className="h-full w-full object-cover object-[50%_42%]"
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
@@ -938,8 +939,12 @@ export default function App() {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-[#065F46]">{copy.aboutMuhtamimTitle}</p>
-                      <p className="text-xs text-[#475569] sm:text-sm">{copy.brandFull}</p>
+                      <p className="font-serif text-base font-bold text-[#0F172A]">
+                        {copy.aboutMuhtamimName}
+                      </p>
+                      <p className="text-xs font-semibold text-[#065F46] sm:text-sm">
+                        {copy.aboutMuhtamimTitle} · {copy.brandFull}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1226,7 +1231,9 @@ export default function App() {
                         onError={() =>
                           setFailedTeacherIds((prev) => ({ ...prev, [teacher.id]: true }))
                         }
-                        className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
+                        className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] ${
+                          teacher.id === 'teacher-1' ? 'object-[50%_45%]' : 'object-top'
+                        }`}
                       />
                     ) : (
                       <div className="flex h-full w-full flex-col items-center justify-center bg-[#F8FAFC] p-6 text-center">
@@ -1691,10 +1698,10 @@ export default function App() {
                 <li className="flex items-center gap-2.5">
                   <Mail className="h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
                   <a
-                    href="mailto:info@aljamiatul-madrasa.edu.bd"
+                    href="mailto:info@darussalam-madrasa.edu.bd"
                     className="break-all hover:text-[#065F46]"
                   >
-                    info@aljamiatul-madrasa.edu.bd
+                    info@darussalam-madrasa.edu.bd
                   </a>
                 </li>
               </ul>

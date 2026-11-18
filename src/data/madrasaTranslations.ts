@@ -224,11 +224,11 @@ export const NOTICES_EN: (Omit<NoticeItem, 'category'> & {
     summary:
       'Admissions for new and continuing students in Nurani, Hifz, Kitab, and General departments will remain open until December 1.',
     fullText: [
-      'All concerned guardians and prospective students are hereby informed that admissions for the new academic session 1447–48 AH (2026–27) at Al-Jamiatul Islamia Adarsha Madrasa are now open with limited seats across all departments.',
+      'All concerned guardians and prospective students are hereby informed that admissions for the new academic session 1447–48 AH (2026–27) at Darus Salam Nurani & Mohila Hafizia Madrasa are now open with limited seats across all departments.',
       'Applicants may submit the online admission form on our website to obtain a tracking ID or collect a printed form directly from the madrasa administrative office.',
       'Oral interviews and placement assessments take place daily from 9:00 AM to 1:00 PM (except Fridays). Please bring 2 passport-size photographs and a photocopy of the student’s birth certificate.',
     ],
-    issuedBy: 'Muhtamim, Al-Jamiatul Islamia Adarsha Madrasa',
+    issuedBy: 'Muhtamim, Darus Salam Nurani & Mohila Hafizia Madrasa',
   },
   {
     id: 'notice-103',
@@ -259,7 +259,7 @@ export const NOTICES_EN: (Omit<NoticeItem, 'category'> & {
       'A guardians’ assembly will be held this Saturday at 10:00 AM in the central auditorium of the madrasa.',
     fullText: [
       'To discuss academic improvement, character development, and hostel discipline, a guardians’ conference has been scheduled for this Saturday at 10:00 AM in the central auditorium.',
-      'Our respected Muhtamim, Maulana Mufti Ahmadullah Qasemi, will deliver the keynote address and guidance.',
+      'Our respected Muhtamim, H. M. Abdur Rahman Khan, will deliver the keynote address and guidance.',
       'Attendance of fathers or authorized guardians of all students is earnestly requested.',
     ],
     issuedBy: 'Nazim-e-Talimat (Academic Secretary)',
@@ -275,7 +275,7 @@ export const NOTICES_EN: (Omit<NoticeItem, 'category'> & {
     summary:
       'Applications are being accepted for tuition waivers and Lillah Boarding support for deserving orphan and financially underprivileged students.',
     fullText: [
-      'Following our annual tradition, Al-Jamiatul Islamia Adarsha Madrasa is offering full tuition scholarships and complimentary residential meals (Lillah Boarding) for orphan and financially disadvantaged meritorious students.',
+      'Following our annual tradition, Darus Salam Nurani & Mohila Hafizia Madrasa is offering full tuition scholarships and complimentary residential meals (Lillah Boarding) for orphan and financially disadvantaged meritorious students.',
       'Guardians wishing to apply are requested to submit a written application with supporting documents to the Muhtamim’s office by November 30.',
     ],
     issuedBy: 'Scholarship & Welfare Fund Committee',
@@ -413,14 +413,14 @@ export const GALLERY_ITEMS_EN: (Omit<GalleryItem, 'category'> & {
 export const TEACHERS_EN: TeacherProfile[] = [
   {
     id: 'teacher-1',
-    name: 'Maulana Mufti Ahmadullah Qasemi',
+    name: 'H. M. Abdur Rahman Khan',
     designation: 'Muhtamim (Principal) & Shaykhul Hadith',
     department: 'Kitab Department (Dawrah-e-Hadith)',
     qualification: 'Dawrah-e-Hadith & Ifta (Darul Uloom Deoband)',
     experience: '28 Years of Teaching Experience',
     subjects: ['Sahih al-Bukhari', 'Usul al-Ifta', 'Tasawwuf & Adab'],
     bio: 'Has been teaching higher Hadith and Fiqh sciences for over 28 years, playing a pioneering role in integrating classical Islamic scholarship with modern education.',
-    photoUrl: '/src/assets/images/teacher_muhtamim_1794936349561.jpg',
+    photoUrl: '/assets/aistudio/beb6c739-6282-4e3a-b0eb-f53f4e608df7_aad8bb44.jfif',
   },
   {
     id: 'teacher-2',
@@ -525,7 +525,7 @@ export const HERO_SLIDES: HeroSlide[] = [
     titleEn: 'Main Academic Building & Central Dome',
     subtitleBn: 'দোতলা খিলানযুক্ত ভবন, মিনার ও সবুজ প্রাঙ্গণ',
     subtitleEn: 'Two-story arched facade, minaret & green lawn',
-    altBn: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসার শ্বেতশুভ্র দোতলা মূল ভবন, গম্বুজ, মিনার ও সবুজ প্রাঙ্গণ',
+    altBn: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসার শ্বেতশুভ্র দোতলা মূল ভবন, গম্বুজ, মিনার ও সবুজ প্রাঙ্গণ',
     altEn: 'Grand white two-story madrasa academic building with central dome, minaret, and green courtyard',
   },
   {
@@ -572,9 +572,9 @@ export const HERO_SLIDES: HeroSlide[] = [
 
 export const UI_COPY = {
   bn: {
-    pageTitle: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা | দ্বীনি ও আধুনিক শিক্ষার সমন্বিত বিদ্যাপীঠ',
-    brandShort: 'আল-জামিয়াতুল ইসলামিয়া',
-    brandFull: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা',
+    pageTitle: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা | দ্বীনি ও আধুনিক শিক্ষার সমন্বিত বিদ্যাপীঠ',
+    brandShort: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা',
+    brandFull: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা',
     phoneDisplay: '০১৭১১-০০২২৩৩',
     phoneFooter: '+৮৮০ ১৭১১-০০২২৩৩',
     navLinks: [
@@ -592,11 +592,11 @@ export const UI_COPY = {
     ctaStudentDashboard: 'ছাত্র ড্যাশবোর্ড',
     menuOpenAria: 'মেনু খুলুন',
     menuCloseAria: 'মেনু বন্ধ করুন',
-    heroWelcome: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসায় স্বাগতম',
+    heroWelcome: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসায় স্বাগতম',
     heroBadge: 'ভর্তি চলছে · শিক্ষাবর্ষ ১৪৪৭–৪৮ হিজরি',
     heroHeadlineLine1: 'ইলমে ওহীর আলোয়',
     heroHeadlineLine2: 'গড়ুন উজ্জ্বল ভবিষ্যৎ',
-    heroSubtitle: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা — দ্বীনি ও আধুনিক শিক্ষার সমন্বিত বিদ্যাপীঠ',
+    heroSubtitle: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা — দ্বীনি ও আধুনিক শিক্ষার সমন্বিত বিদ্যাপীঠ',
     heroDescription:
       'বিশুদ্ধ আকীদা ও সুন্নতে নববীর আলোকে আগামী প্রজন্মের নৈতিক ও মেধার বিকাশ ঘটানোই আমাদের মূল ব্রত। নূরানী, হিফজুল কুরআন এবং কিতাব বিভাগের পাশাপাশি যুগোপযোগী সাধারণ ও কারিগরি শিক্ষায় সুসজ্জিত একটি নিরাপদ শিক্ষাঙ্গন।',
     heroApplyBtn: 'ভর্তি আবেদন করুন',
@@ -619,7 +619,8 @@ export const UI_COPY = {
     aboutEyebrow: 'আমাদের পরিচিতি ও লক্ষ্য',
     aboutHeading: 'মুহতামিমের বাণী',
     aboutQuote:
-      '“বিসমিল্লাহির রাহমানির রাহিম। প্রকৃত শিক্ষা কেবল সনদ অর্জনের মাধ্যম নয়, বরং মানুষের অন্তরকে আলোকিত করা এবং আল্লাহভীরু, যোগ্য ও দায়িত্বশীল মানুষ হিসেবে গড়ে তোলাই ইলমের মূল উদ্দেশ্য। আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা সূচনালগ্ন থেকেই পবিত্র কুরআন ও সুন্নাহর গভীর জ্ঞানের পাশাপাশি সমকালীন বাংলা, ইংরেজি, গণিত ও প্রযুক্তি শিক্ষায় শিক্ষার্থীদের দক্ষ করে তুলতে নিরলস কাজ করে যাচ্ছে।”',
+      '“বিসমিল্লাহির রাহমানির রাহিম। প্রকৃত শিক্ষা কেবল সনদ অর্জনের মাধ্যম নয়, বরং মানুষের অন্তরকে আলোকিত করা এবং আল্লাহভীরু, যোগ্য ও দায়িত্বশীল মানুষ হিসেবে গড়ে তোলাই ইলমের মূল উদ্দেশ্য। দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা সূচনালগ্ন থেকেই পবিত্র কুরআন ও সুন্নাহর গভীর জ্ঞানের পাশাপাশি সমকালীন বাংলা, ইংরেজি, গণিত ও প্রযুক্তি শিক্ষায় শিক্ষার্থীদের দক্ষ করে তুলতে নিরলস কাজ করে যাচ্ছে।”',
+    aboutMuhtamimName: 'এইচ এম আব্দুর রহমান খাঁন',
     aboutMuhtamimTitle: 'মুহতামিম',
     deptEyebrow: 'শিক্ষাক্রম ও বিভাগসমূহ',
     deptHeading: 'সুসংগঠিত চারটি স্বতন্ত্র শিক্ষা বিভাগ',
@@ -638,7 +639,7 @@ export const UI_COPY = {
     noticeViewDetails: 'বিস্তারিত দেখুন',
     noticeModalClose: 'নোটিশ বন্ধ করুন',
     noticeByOrder: 'আদেশক্রমে,',
-    noticeInstitutionLine: 'আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা, মোহাম্মদপুর, ঢাকা',
+    noticeInstitutionLine: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা, মোহাম্মদপুর, ঢাকা',
     noticePrint: 'প্রিন্ট করুন',
     closeBtn: 'বন্ধ করুন',
     galleryEyebrow: 'ক্যাম্পাস ও শিক্ষাঙ্গনের স্থিরচিত্র',
@@ -736,7 +737,7 @@ export const UI_COPY = {
     footerInterviewLabel: 'ভর্তি সাক্ষাৎকার',
     footerInterviewHours: 'সকাল ৯:০০ – দুপুর ১:০০',
     footerHoliday: 'শুক্রবার সাপ্তাহিক ছুটি',
-    footerCopyright: '© ২০২৬ আল-জামিয়াতুল ইসলামিয়া আদর্শ মাদ্রাসা। সর্বস্বত্ব সংরক্ষিত।',
+    footerCopyright: '© ২০২৬ দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা। সর্বস্বত্ব সংরক্ষিত।',
     footerMotto: 'শিক্ষা · আদব · তাকওয়া',
     auth: {
       portalTitle: 'ছাত্র পোর্টাল',
@@ -772,7 +773,7 @@ export const UI_COPY = {
       errNetwork: 'সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
     },
     dashboard: {
-      headerTitle: 'আল-জামিয়াতুল ইসলামিয়া · ছাত্র ড্যাশবোর্ড',
+      headerTitle: 'দারুস সালাম নুরানী ও মহিলা হাফিজিয়া মাদ্রাসা · ছাত্র ড্যাশবোর্ড',
       idPrefix: 'আইডি:',
       backToSite: 'মূল ওয়েবসাইট',
       logout: 'লগআউট',
@@ -842,9 +843,9 @@ export const UI_COPY = {
     },
   },
   en: {
-    pageTitle: 'Al-Jamiatul Islamia Adarsha Madrasa | Integrated Islamic & Modern Education',
-    brandShort: 'Al-Jamiatul Islamia',
-    brandFull: 'Al-Jamiatul Islamia Adarsha Madrasa',
+    pageTitle: 'Darus Salam Nurani & Mohila Hafizia Madrasa | Integrated Islamic & Modern Education',
+    brandShort: 'Darus Salam Nurani & Mohila Hafizia Madrasa',
+    brandFull: 'Darus Salam Nurani & Mohila Hafizia Madrasa',
     phoneDisplay: '+880 1711-002233',
     phoneFooter: '+880 1711-002233',
     navLinks: [
@@ -862,7 +863,7 @@ export const UI_COPY = {
     ctaStudentDashboard: 'Student Dashboard',
     menuOpenAria: 'Open navigation menu',
     menuCloseAria: 'Close navigation menu',
-    heroWelcome: 'Welcome to Al-Jamiatul Islamia Adarsha Madrasa',
+    heroWelcome: 'Welcome to Darus Salam Nurani & Mohila Hafizia Madrasa',
     heroBadge: 'Admissions Open · Session 1447–48 AH',
     heroHeadlineLine1: 'Learn Islam,',
     heroHeadlineLine2: 'Build a Better Future',
@@ -889,7 +890,8 @@ export const UI_COPY = {
     aboutEyebrow: 'Our Identity & Mission',
     aboutHeading: "Principal's Message",
     aboutQuote:
-      '“Bismillahir Rahmanir Rahim. True education is never merely a pursuit of certificates; its core purpose is to illuminate the heart and raise God-conscious, capable, and responsible human beings. Since its founding, Al-Jamiatul Islamia Adarsha Madrasa has worked tirelessly to pair deep mastery of the Quran and Sunnah with proficiency in Bengali, English, Mathematics, and Information Technology.”',
+      '“Bismillahir Rahmanir Rahim. True education is never merely a pursuit of certificates; its core purpose is to illuminate the heart and raise God-conscious, capable, and responsible human beings. Since its founding, Darus Salam Nurani & Mohila Hafizia Madrasa has worked tirelessly to pair deep mastery of the Quran and Sunnah with proficiency in Bengali, English, Mathematics, and Information Technology.”',
+    aboutMuhtamimName: 'H. M. Abdur Rahman Khan',
     aboutMuhtamimTitle: 'Muhtamim (Principal)',
     deptEyebrow: 'Curriculum & Faculties',
     deptHeading: 'Four Well-Structured Academic Departments',
@@ -908,7 +910,7 @@ export const UI_COPY = {
     noticeViewDetails: 'View Details',
     noticeModalClose: 'Close notice',
     noticeByOrder: 'By Order,',
-    noticeInstitutionLine: 'Al-Jamiatul Islamia Adarsha Madrasa, Mohammadpur, Dhaka',
+    noticeInstitutionLine: 'Darus Salam Nurani & Mohila Hafizia Madrasa, Mohammadpur, Dhaka',
     noticePrint: 'Print Notice',
     closeBtn: 'Close',
     galleryEyebrow: 'Campus Life & Learning Moments',
@@ -1006,7 +1008,7 @@ export const UI_COPY = {
     footerInterviewLabel: 'Admission Interview',
     footerInterviewHours: '9:00 AM – 1:00 PM',
     footerHoliday: 'Friday Weekly Holiday',
-    footerCopyright: '© 2026 Al-Jamiatul Islamia Adarsha Madrasa. All rights reserved.',
+    footerCopyright: '© 2026 Darus Salam Nurani & Mohila Hafizia Madrasa. All rights reserved.',
     footerMotto: 'Knowledge · Adab · Taqwa',
     auth: {
       portalTitle: 'Student Portal',
@@ -1042,7 +1044,7 @@ export const UI_COPY = {
       errNetwork: 'Unable to connect to the server. Please try again.',
     },
     dashboard: {
-      headerTitle: 'Al-Jamiatul Islamia · Student Dashboard',
+      headerTitle: 'Darus Salam Nurani & Mohila Hafizia Madrasa · Student Dashboard',
       idPrefix: 'ID:',
       backToSite: 'Main Website',
       logout: 'Logout',

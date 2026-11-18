@@ -64,7 +64,9 @@ export function TeacherProfileModal({ teacher, lang, onClose }: TeacherProfileMo
                     alt={teacher.name}
                     referrerPolicy="no-referrer"
                     onError={() => setImgFailed(true)}
-                    className="h-full w-full object-cover object-top"
+                    className={`h-full w-full object-cover ${
+                      teacher.id === 'teacher-1' ? 'object-[50%_45%]' : 'object-top'
+                    }`}
                   />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center bg-[#F8FAFC] p-6 text-center">
