@@ -8,7 +8,7 @@ import { AdminDashboard } from './AdminDashboard';
 import { LanguageToggle } from './LanguageToggle';
 import { ReceiptModal } from './ReceiptModal';
 
-function broadcastCmsUpdate() {
+function broadcastCmsUpdate(nextCms?: SiteCmsData) {
   try {
     localStorage.setItem('madrasa_cms_updated_at', String(Date.now()));
   } catch {
@@ -17,7 +17,7 @@ function broadcastCmsUpdate() {
   try {
     if (typeof BroadcastChannel !== 'undefined') {
       const channel = new BroadcastChannel('madrasa_cms_sync');
-      channel.postMessage({ type: 'cms-updated', ts: Date.now() });
+      channel.postMessage({ type: 'cms-updated', ts: Date.now(), cms: nextCms });
       channel.close();
     }
   } catch {
@@ -76,7 +76,7 @@ export function StandaloneAdminApp() {
 
   const loadCms = useCallback(async () => {
     try {
-      const res = await fetch('/api/cms');
+      const res = await fetch('/api/cms', { cache: 'no-store' });
       if (!res.ok) return;
       const data = (await res.json()) as { cms?: SiteCmsData };
       if (data.cms) {
@@ -89,6 +89,30 @@ export function StandaloneAdminApp() {
 
   useEffect(() => {
     void loadCms();
+    let eventSource: EventSource | null = null;
+    try {
+      if (typeof EventSource !== 'undefined') {
+        eventSource = new EventSource('/api/cms/stream');
+        const handleSseCms = (evt: MessageEvent<string>) => {
+          try {
+            const parsed = JSON.parse(evt.data) as { cms?: SiteCmsData };
+            if (parsed.cms) {
+              setCmsData(parsed.cms);
+            }
+          } catch {
+            // ignore malformed payload
+          }
+        };
+        eventSource.addEventListener('cms-updated', handleSseCms as EventListener);
+      }
+    } catch {
+      eventSource = null;
+    }
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
   }, [loadCms]);
 
   useEffect(() => {
@@ -197,7 +221,7 @@ export function StandaloneAdminApp() {
 
   const handleCmsUpdated = useCallback((nextCms: SiteCmsData) => {
     setCmsData(nextCms);
-    broadcastCmsUpdate();
+    broadcastCmsUpdate(nextCms);
   }, []);
 
   const activeDepartments: Department[] = useMemo(

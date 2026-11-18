@@ -146,10 +146,25 @@ function readCmsDatabase(): SiteCmsData {
   }
 }
 
+const cmsStreamClients = new Set<Response>();
+
+function broadcastCmsUpdateToClients(cms: SiteCmsData) {
+  if (cmsStreamClients.size === 0) return;
+  const payload = `event: cms-updated\ndata: ${JSON.stringify({ cms })}\n\n`;
+  for (const client of cmsStreamClients) {
+    try {
+      client.write(payload);
+    } catch {
+      cmsStreamClients.delete(client);
+    }
+  }
+}
+
 function writeCmsDatabase(cms: SiteCmsData) {
   ensureDataDir();
   cms.updatedAt = new Date().toISOString();
   fs.writeFileSync(CMS_FILE, JSON.stringify(cms, null, 2), 'utf8');
+  broadcastCmsUpdateToClients(cms);
 }
 
 interface AdmissionsDatabase {
@@ -765,10 +780,39 @@ async function startServer() {
   // PUBLIC CMS & ONLINE ADMISSION ENDPOINTS
   // ============================================================================
 
-  // 6. Get Full Public CMS Data
+  // 6. Get Full Public CMS Data (always fresh, no caching)
   app.get('/api/cms', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     const cms = readCmsDatabase();
     res.json({ cms });
+  });
+
+  // 6b. Real-Time Server-Sent Events (SSE) stream so admin changes reflect instantly on all open main website tabs/devices
+  app.get('/api/cms/stream', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const initialCms = readCmsDatabase();
+    res.write(`event: cms-sync\ndata: ${JSON.stringify({ cms: initialCms })}\n\n`);
+
+    cmsStreamClients.add(res);
+    const keepalive = setInterval(() => {
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(keepalive);
+        cmsStreamClients.delete(res);
+      }
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(keepalive);
+      cmsStreamClients.delete(res);
+    });
   });
 
   // 7. Submit & Persist Online Admission Form
@@ -927,6 +971,7 @@ async function startServer() {
   });
 
   app.get('/api/admin/cms', requireAdmin, (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const cms = readCmsDatabase();
     res.json({ cms });
   });

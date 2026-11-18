@@ -117,18 +117,28 @@ export default function App() {
         : `${activeBrandFull} — অফিসিয়াল ওয়েবসাইট`;
   }, [lang, activeBrandFull]);
 
+  const lastCmsUpdatedAtRef = useRef<string>('');
+
+  const applyCmsSnapshot = useCallback((nextCms: SiteCmsData) => {
+    if (nextCms.updatedAt && nextCms.updatedAt === lastCmsUpdatedAtRef.current) {
+      return;
+    }
+    lastCmsUpdatedAtRef.current = nextCms.updatedAt || '';
+    setCmsData(nextCms);
+  }, []);
+
   const fetchLatestCms = useCallback(async () => {
     try {
       const res = await fetch('/api/cms', { cache: 'no-store' });
       if (!res.ok) return;
       const data = (await res.json()) as { cms?: SiteCmsData };
       if (data.cms) {
-        setCmsData(data.cms);
+        applyCmsSnapshot(data.cms);
       }
     } catch {
       // Fallback smoothly to current/default CMS data if offline
     }
-  }, []);
+  }, [applyCmsSnapshot]);
 
   useEffect(() => {
     void fetchLatestCms();
@@ -152,23 +162,62 @@ export default function App() {
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('madrasa_cms_sync');
-        channel.onmessage = () => {
-          void fetchLatestCms();
+        channel.onmessage = (event: MessageEvent<{ cms?: SiteCmsData }>) => {
+          if (event.data?.cms) {
+            applyCmsSnapshot(event.data.cms);
+          } else {
+            void fetchLatestCms();
+          }
         };
       }
     } catch {
       channel = null;
     }
 
+    let eventSource: EventSource | null = null;
+    try {
+      if (typeof EventSource !== 'undefined') {
+        eventSource = new EventSource('/api/cms/stream');
+        const handleSseCms = (evt: MessageEvent<string>) => {
+          try {
+            const parsed = JSON.parse(evt.data) as { cms?: SiteCmsData };
+            if (parsed.cms) {
+              applyCmsSnapshot(parsed.cms);
+            }
+          } catch {
+            // ignore malformed SSE event payload
+          }
+        };
+        eventSource.addEventListener('cms-sync', handleSseCms as EventListener);
+        eventSource.addEventListener('cms-updated', handleSseCms as EventListener);
+      }
+    } catch {
+      eventSource = null;
+    }
+
+    // Fallback check when tab is visible and SSE is temporarily disconnected
+    const fallbackTimer = window.setInterval(() => {
+      if (
+        document.visibilityState === 'visible' &&
+        (!eventSource || eventSource.readyState !== EventSource.OPEN)
+      ) {
+        void fetchLatestCms();
+      }
+    }, 8000);
+
     return () => {
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleFocusOrVisible);
       window.removeEventListener('storage', handleStorage);
+      window.clearInterval(fallbackTimer);
       if (channel) {
         channel.close();
       }
+      if (eventSource) {
+        eventSource.close();
+      }
     };
-  }, [fetchLatestCms]);
+  }, [applyCmsSnapshot, fetchLatestCms]);
 
   const activeHeroSlides = useMemo(
     () =>
