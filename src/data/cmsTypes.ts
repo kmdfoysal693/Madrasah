@@ -179,6 +179,7 @@ export interface StoredAdmissionRecord {
   residentialType: string;
   residentialKey: ResidentialKey;
   mobile: string;
+  email?: string;
   address: string;
   status: AdmissionStatus;
   adminNote: string;

@@ -12,6 +12,7 @@ export type AdminThemeId = 'emerald' | 'navy' | 'amber' | 'slate';
 export type AdminTabId =
   | 'overview'
   | 'admissions'
+  | 'records'
   | 'branding'
   | 'hero'
   | 'about'
@@ -106,6 +107,7 @@ export interface AdminDashboardConfig {
 export const ALL_ADMIN_TABS: AdminTabId[] = [
   'overview',
   'admissions',
+  'records',
   'branding',
   'hero',
   'about',
@@ -120,6 +122,7 @@ export const ALL_ADMIN_TABS: AdminTabId[] = [
 export const DEFAULT_ADMIN_TAB_LABELS: Record<AdminTabId, { bn: string; en: string }> = {
   overview: { bn: 'ড্যাশবোর্ড সারসংক্ষেপ', en: 'Overview' },
   admissions: { bn: 'ভর্তি আবেদনসমূহ', en: 'Admissions' },
+  records: { bn: 'সকল ডাটাবেজ রেকর্ড', en: 'Database & CSV' },
   branding: { bn: 'প্রতিষ্ঠান, লোগো ও তথ্য', en: 'Institution & Logo' },
   hero: { bn: 'হিরো ও ক্যাম্পাস ছবি', en: 'Hero & Photos' },
   about: { bn: 'মুহতামিমের বাণী ও পাঠাগার', en: "Principal's Message" },

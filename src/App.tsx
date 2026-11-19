@@ -57,6 +57,8 @@ import {
   type ResidentialKey,
 } from './data/madrasaTranslations';
 import type { StudentUser } from './data/studentPortalData';
+import { signOut } from 'firebase/auth';
+import { auth, setInMemoryFirebaseToken } from './lib/firebase';
 import { NoticeModal } from './components/NoticeModal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { GalleryLightboxModal } from './components/GalleryModals';
@@ -195,6 +197,8 @@ export default function App() {
     } catch {
       // ignore storage errors
     }
+    setInMemoryFirebaseToken(null);
+    void signOut(auth).catch(() => {});
     setStudentToken(null);
     setCurrentStudent(null);
     setShowDashboard(false);
@@ -210,8 +214,10 @@ export default function App() {
   const [classIndex, setClassIndex] = useState(0);
   const [residentialKey, setResidentialKey] = useState<ResidentialKey>('boarding');
   const [mobile, setMobile] = useState('');
+  const [admissionEmail, setAdmissionEmail] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
+  const [submittingInline, setSubmittingInline] = useState(false);
   const [latestSubmission, setLatestSubmission] = useState<AdmissionSubmission | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
@@ -314,8 +320,9 @@ export default function App() {
     return nextErrors;
   };
 
-  const handleAdmissionSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleAdmissionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submittingInline) return;
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
@@ -357,8 +364,28 @@ export default function App() {
       residentialType: resObj.bn,
       residentialKey,
       mobile: normalizeMobileNumber(mobile),
+      email: admissionEmail.trim().toLowerCase(),
       address: address.trim(),
     };
+
+    setSubmittingInline(true);
+    try {
+      const response = await fetch('/api/admissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as { admission?: AdmissionSubmission };
+        if (data.admission?.trackingId) {
+          submission.trackingId = data.admission.trackingId;
+        }
+      }
+    } catch {
+      // Keep client receipt resilient if network is temporarily unreachable
+    } finally {
+      setSubmittingInline(false);
+    }
 
     setLatestSubmission(submission);
     setReceiptModalOpen(true);
@@ -373,6 +400,7 @@ export default function App() {
     setClassIndex(0);
     setResidentialKey('boarding');
     setMobile('');
+    setAdmissionEmail('');
     setAddress('');
     setErrors({});
   };
@@ -1593,6 +1621,25 @@ export default function App() {
                       <p className="mt-1.5 text-xs font-medium text-red-600">{errors.mobile}</p>
                     )}
                   </div>
+
+                  {/* Email Address (Optional) */}
+                  <div>
+                    <label
+                      htmlFor="admissionEmail"
+                      className="block text-sm font-medium text-[#0F172A]"
+                    >
+                      {copy.labelEmailOptional}
+                    </label>
+                    <input
+                      id="admissionEmail"
+                      name="admissionEmail"
+                      type="email"
+                      value={admissionEmail}
+                      onChange={(e) => setAdmissionEmail(e.target.value)}
+                      placeholder={copy.placeholderEmailOptional}
+                      className="mt-2 w-full rounded-lg border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
+                    />
+                  </div>
                 </div>
 
                 {/* Address */}
@@ -1632,9 +1679,12 @@ export default function App() {
                   </p>
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-7 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
+                    disabled={submittingInline}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#065F46] px-7 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#047857] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0 disabled:opacity-60"
                   >
-                    <span>{copy.inlineFormSubmit}</span>
+                    <span>
+                      {submittingInline ? copy.inlineFormSubmitting : copy.inlineFormSubmit}
+                    </span>
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
@@ -1740,7 +1790,18 @@ export default function App() {
 
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569] sm:flex-row">
             <p>{copy.footerCopyright}</p>
-            <p>{copy.footerMotto}</p>
+            <div className="flex items-center gap-4">
+              <p>{copy.footerMotto}</p>
+              <span aria-hidden="true" className="text-slate-300">
+                ·
+              </span>
+              <a
+                href="/admin"
+                className="font-medium text-[#065F46] underline-offset-4 hover:underline"
+              >
+                {lang === 'en' ? 'Admin Panel' : 'অ্যাডমিন প্যানেল'}
+              </a>
+            </div>
           </div>
         </div>
       </footer>

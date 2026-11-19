@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   ClipboardList,
+  Database,
   ExternalLink,
   FileText,
   GraduationCap,
@@ -32,6 +33,7 @@ import { AboutPanel } from '../admin/panels/AboutPanel';
 import { AdmissionsPanel } from '../admin/panels/AdmissionsPanel';
 import { BrandingPanel } from '../admin/panels/BrandingPanel';
 import { CustomizePanel } from '../admin/panels/CustomizePanel';
+import { DatabaseRecordsPanel } from '../admin/panels/DatabaseRecordsPanel';
 import { DepartmentsPanel } from '../admin/panels/DepartmentsPanel';
 import { GalleryPanel } from '../admin/panels/GalleryPanel';
 import { HeroPanel } from '../admin/panels/HeroPanel';
@@ -60,6 +62,7 @@ interface AdminDashboardProps {
 const TAB_ICONS: Record<AdminTabId, typeof LayoutDashboard> = {
   overview: LayoutDashboard,
   admissions: ClipboardList,
+  records: Database,
   branding: Building2,
   hero: ImageIcon,
   about: BookOpen,
@@ -469,6 +472,7 @@ export function AdminDashboard({
 
           {activeTab === 'admissions' && (
             <AdmissionsPanel
+              adminToken={adminToken}
               admissions={admissions}
               admissionsLoading={admissionsLoading}
               noteDrafts={noteDrafts}
@@ -483,6 +487,17 @@ export function AdminDashboard({
               onAdmissionsUpdated={setAdmissions}
               onViewAdmissionReceipt={onViewAdmissionReceipt}
               apiRequest={apiRequest}
+              showToast={showToast}
+            />
+          )}
+
+          {activeTab === 'records' && (
+            <DatabaseRecordsPanel
+              adminToken={adminToken}
+              lang={lang}
+              cardRadiusClass={cardRadiusClass}
+              primaryHex={theme.primary}
+              onLogout={onLogout}
               showToast={showToast}
             />
           )}

@@ -45,6 +45,7 @@ export interface AdmissionSubmission {
   residentialType: ResidentialType;
   residentialKey?: 'boarding' | 'non_residential' | 'day_care';
   mobile: string;
+  email?: string;
   address: string;
 }
 

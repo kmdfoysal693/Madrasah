@@ -2,6 +2,7 @@ export interface StudentUser {
   id: string;
   studentRoll: string;
   name: string;
+  fatherName?: string;
   email: string;
   phone: string;
   department: string;

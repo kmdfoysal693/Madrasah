@@ -32,6 +32,7 @@ const ADMISSION_STATUS_META: Record<
 };
 
 interface AdmissionsPanelProps {
+  adminToken: string;
   admissions: StoredAdmissionRecord[];
   admissionsLoading: boolean;
   noteDrafts: Record<string, string>;
@@ -48,6 +49,7 @@ interface AdmissionsPanelProps {
 }
 
 export function AdmissionsPanel({
+  adminToken,
   admissions,
   admissionsLoading,
   noteDrafts,
@@ -162,6 +164,30 @@ export function AdmissionsPanel({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportUnifiedCsv = async () => {
+    try {
+      const res = await fetch('/api/admin/records.csv', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (!res.ok) {
+        showToast('error', isEn ? 'Failed to export all records.' : 'সকল তথ্যের CSV ডাউনলোড করা যায়নি।');
+        return;
+      }
+      const csvText = await res.text();
+      const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `madrasa-all-records-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('error', isEn ? 'Failed to export all records.' : 'সকল তথ্যের CSV ডাউনলোড করা যায়নি।');
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -184,6 +210,14 @@ export function AdmissionsPanel({
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{isEn ? 'Refresh' : 'রিফ্রেশ'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportUnifiedCsv}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#065F46]/40 bg-[#ECFDF5] px-3.5 py-2 text-xs font-semibold text-[#065F46] hover:bg-[#065F46]/10"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{isEn ? 'All Records (Forms & Logins) CSV' : 'সকল ডেটা (ভর্তি ও লগইন) CSV'}</span>
           </button>
           <button
             type="button"
@@ -310,6 +344,7 @@ export function AdmissionsPanel({
                           residentialType: adm.residentialType as ResidentialType,
                           residentialKey: adm.residentialKey,
                           mobile: adm.mobile,
+                          email: adm.email,
                           address: adm.address,
                         })
                       }

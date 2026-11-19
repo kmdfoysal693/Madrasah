@@ -156,6 +156,14 @@ export function ReceiptModal({
               {formatDigits(submission.mobile, lang)}
             </dd>
           </div>
+          {submission.email && (
+            <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
+              <dt className="text-[#475569]">{copy.receiptRows.email}</dt>
+              <dd className="font-medium text-[#0F172A] break-all sm:col-span-2">
+                {submission.email}
+              </dd>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-3 sm:gap-4">
             <dt className="text-[#475569]">{copy.receiptRows.address}</dt>
             <dd className="text-[#0F172A] sm:col-span-2">{submission.address}</dd>

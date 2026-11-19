@@ -63,6 +63,7 @@ export function AdmissionFormModal({
   const [classIndex, setClassIndex] = useState(0);
   const [residentialKey, setResidentialKey] = useState<ResidentialKey>('boarding');
   const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<ModalFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -163,6 +164,7 @@ export function AdmissionFormModal({
       residentialType: resObj.bn,
       residentialKey,
       mobile: cleanMobile,
+      email: email.trim().toLowerCase(),
       address: address.trim(),
     };
 
@@ -190,6 +192,7 @@ export function AdmissionFormModal({
     setFatherName('');
     setResidentialKey('boarding');
     setMobile('');
+    setEmail('');
     setAddress('');
     onSubmitted(submission);
   };
@@ -400,6 +403,24 @@ export function AdmissionFormModal({
                 <p className="mt-1 text-xs font-medium text-red-600">{errors.mobile}</p>
               )}
             </div>
+          </div>
+
+          {/* Email (Optional) */}
+          <div>
+            <label
+              htmlFor="popup-email"
+              className="block text-sm font-medium text-[#0F172A]"
+            >
+              {copy.labelEmailOptional}
+            </label>
+            <input
+              id="popup-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={copy.placeholderEmailOptional}
+              className="mt-1.5 w-full rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm text-[#0F172A] placeholder:text-slate-400 focus:border-[#065F46] focus:outline-none focus:ring-2 focus:ring-[#065F46]/15"
+            />
           </div>
 
           {/* Current Address */}

@@ -117,6 +117,11 @@ export function OverviewPanel({
                 sub: isEn ? 'Review, approve or export CSV' : 'সংরক্ষিত আবেদন ও স্ট্যাটাস',
               },
               {
+                tab: 'records' as AdminTabId,
+                title: isEn ? 'View Database & CSV File' : 'সকল ডাটাবেজ রেকর্ড দেখুন',
+                sub: isEn ? 'Forms, logins, emails & CSV export' : 'নাম, পিতা, মোবাইল, ইমেইল ও CSV ফাইল',
+              },
+              {
                 tab: 'notices' as AdminTabId,
                 title: isEn ? 'Publish or Archive Notice' : 'নোটিশ যোগ বা সংরক্ষণ',
                 sub: isEn ? 'Keep old notices saved' : 'নতুন নোটিশ ও পূর্বের রেকর্ড',
@@ -125,11 +130,6 @@ export function OverviewPanel({
                 tab: 'branding' as AdminTabId,
                 title: isEn ? 'Edit Name, Logo & Info' : 'নাম, লোগো ও তথ্য বদলান',
                 sub: isEn ? 'Header, footer & contacts' : 'প্রতিষ্ঠানের মূল পরিচয়',
-              },
-              {
-                tab: 'customize' as AdminTabId,
-                title: isEn ? 'Customize This Dashboard' : 'ড্যাশবোর্ড কাস্টমাইজ করুন',
-                sub: isEn ? 'Theme color, tabs & layout' : 'রঙ, মেনু ও ডিজাইন পরিবর্তন',
               },
             ].map((card) => (
               <button
