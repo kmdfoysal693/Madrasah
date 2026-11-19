@@ -1,6 +1,7 @@
 import { desc, eq, or } from 'drizzle-orm';
 import { db } from './index.ts';
 import { admissions, cmsState, madrasaRecords, students } from './schema.ts';
+import { getSupabaseAdmin, isSupabaseConfigured } from './supabase.ts';
 import type { AdmissionStatus, StoredAdmissionRecord } from '../data/cmsTypes.ts';
 import type {
   ExamResultTerm,
@@ -72,6 +73,29 @@ function mapRowToAdmission(row: typeof admissions.$inferSelect): StoredAdmission
   };
 }
 
+function mapSupabaseAdmission(row: Record<string, unknown>): StoredAdmissionRecord {
+  return {
+    id: String(row.id ?? ''),
+    trackingId: String(row.tracking_id ?? ''),
+    submittedAt: String(row.submitted_at ?? ''),
+    submittedAtIso: String(row.submitted_at_iso ?? ''),
+    studentName: String(row.student_name ?? ''),
+    fatherName: String(row.father_name ?? ''),
+    dateOfBirth: String(row.date_of_birth ?? ''),
+    department: String(row.department ?? ''),
+    departmentId: String(row.department_id ?? ''),
+    className: String(row.class_name ?? ''),
+    classIndex: Number(row.class_index ?? 0),
+    residentialType: String(row.residential_type ?? '') as StoredAdmissionRecord['residentialType'],
+    residentialKey: String(row.residential_key ?? 'boarding') as StoredAdmissionRecord['residentialKey'],
+    mobile: String(row.mobile ?? ''),
+    email: String(row.email ?? ''),
+    address: String(row.address ?? ''),
+    status: String(row.status ?? 'pending') as AdmissionStatus,
+    adminNote: String(row.admin_note ?? ''),
+  };
+}
+
 function mapRowToStudent(row: typeof students.$inferSelect): DbStudentRecord {
   return {
     id: row.id,
@@ -91,6 +115,36 @@ function mapRowToStudent(row: typeof students.$inferSelect): DbStudentRecord {
     examResults: row.examResults,
     lastLoginAt: row.lastLoginAt ? row.lastLoginAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function mapSupabaseStudent(row: Record<string, unknown>): DbStudentRecord {
+  return {
+    id: String(row.id ?? ''),
+    studentRoll: String(row.student_roll ?? ''),
+    firebaseUid: String(row.firebase_uid ?? ''),
+    name: String(row.name ?? ''),
+    fatherName: String(row.father_name ?? ''),
+    email: String(row.email ?? ''),
+    phone: String(row.phone ?? ''),
+    department: String(row.department ?? ''),
+    className: String(row.class_name ?? ''),
+    session: String(row.session ?? ''),
+    passwordSalt: String(row.password_salt ?? ''),
+    passwordHash: String(row.password_hash ?? ''),
+    tuitionRecords: Array.isArray(row.tuition_records)
+      ? (row.tuition_records as TuitionRecord[])
+      : [],
+    examRoutine: Array.isArray(row.exam_routine)
+      ? (row.exam_routine as ExamRoutineItem[])
+      : [],
+    examResults: Array.isArray(row.exam_results)
+      ? (row.exam_results as ExamResultTerm[])
+      : [],
+    lastLoginAt: row.last_login_at ? new Date(String(row.last_login_at)).toISOString() : null,
+    createdAt: row.created_at
+      ? new Date(String(row.created_at)).toISOString()
+      : new Date().toISOString(),
   };
 }
 
@@ -117,6 +171,33 @@ function mapRowToUnifiedRecord(row: typeof madrasaRecords.$inferSelect): Unified
   };
 }
 
+function mapSupabaseUnifiedRecord(row: Record<string, unknown>): UnifiedMadrasaRecord {
+  return {
+    id: Number(row.id ?? 0),
+    recordType: String(row.record_type ?? ''),
+    referenceCode: String(row.reference_code ?? ''),
+    name: String(row.name ?? ''),
+    fatherName: String(row.father_name ?? ''),
+    mobile: String(row.mobile ?? ''),
+    email: String(row.email ?? ''),
+    passwordHash: String(row.password_hash ?? ''),
+    dateOfBirth: String(row.date_of_birth ?? ''),
+    department: String(row.department ?? ''),
+    className: String(row.class_name ?? ''),
+    residentialType: String(row.residential_type ?? ''),
+    address: String(row.address ?? ''),
+    status: String(row.status ?? 'active'),
+    firebaseUid: String(row.firebase_uid ?? ''),
+    lastLoginAt: row.last_login_at ? new Date(String(row.last_login_at)).toISOString() : null,
+    createdAt: row.created_at
+      ? new Date(String(row.created_at)).toISOString()
+      : new Date().toISOString(),
+    updatedAt: row.updated_at
+      ? new Date(String(row.updated_at)).toISOString()
+      : new Date().toISOString(),
+  };
+}
+
 // ---------- Unified Single-Table Recorder ----------
 export async function upsertUnifiedMadrasaRecord(input: {
   recordType: 'online_admission' | 'student_account' | 'admission_and_student' | 'google_signin';
@@ -136,6 +217,54 @@ export async function upsertUnifiedMadrasaRecord(input: {
   lastLoginAt?: Date | null;
 }): Promise<UnifiedMadrasaRecord> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const nowIso = new Date().toISOString();
+      const { data: existing } = await supabase
+        .from('madrasa_records')
+        .select('*')
+        .eq('reference_code', input.referenceCode)
+        .limit(1)
+        .maybeSingle();
+
+      const payload: Record<string, unknown> = {
+        record_type: input.recordType,
+        reference_code: input.referenceCode,
+        name: input.name,
+        father_name: input.fatherName ?? (existing?.father_name as string | undefined) ?? '',
+        mobile: input.mobile ?? (existing?.mobile as string | undefined) ?? '',
+        email: input.email ?? (existing?.email as string | undefined) ?? '',
+        password_hash:
+          input.passwordHash || (existing?.password_hash as string | undefined) || '',
+        date_of_birth:
+          input.dateOfBirth || (existing?.date_of_birth as string | undefined) || '',
+        department: input.department || (existing?.department as string | undefined) || '',
+        class_name: input.className || (existing?.class_name as string | undefined) || '',
+        residential_type:
+          input.residentialType || (existing?.residential_type as string | undefined) || '',
+        address: input.address || (existing?.address as string | undefined) || '',
+        status: input.status || (existing?.status as string | undefined) || 'active',
+        firebase_uid:
+          input.firebaseUid || (existing?.firebase_uid as string | undefined) || '',
+        last_login_at: input.lastLoginAt
+          ? input.lastLoginAt.toISOString()
+          : (existing?.last_login_at ?? null),
+        updated_at: nowIso,
+      };
+
+      const { data, error } = await supabase
+        .from('madrasa_records')
+        .upsert(payload, { onConflict: 'reference_code' })
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return mapSupabaseUnifiedRecord(data as Record<string, unknown>);
+    }
+
     const now = new Date();
     const result = await db
       .insert(madrasaRecords)
@@ -182,12 +311,28 @@ export async function upsertUnifiedMadrasaRecord(input: {
     return mapRowToUnifiedRecord(result[0]);
   } catch (error) {
     console.error('Database query failed in upsertUnifiedMadrasaRecord:', error);
-    throw new Error('Failed to save record in PostgreSQL.', { cause: error });
+    throw new Error('Failed to save record in database.', { cause: error });
   }
 }
 
 export async function listUnifiedMadrasaRecords(): Promise<UnifiedMadrasaRecord[]> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('madrasa_records')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ?? []).map((row) =>
+        mapSupabaseUnifiedRecord(row as Record<string, unknown>),
+      );
+    }
+
     const rows = await db
       .select()
       .from(madrasaRecords)
@@ -195,18 +340,32 @@ export async function listUnifiedMadrasaRecords(): Promise<UnifiedMadrasaRecord[
     return rows.map(mapRowToUnifiedRecord);
   } catch (error) {
     console.error('Database query failed in listUnifiedMadrasaRecords:', error);
-    throw new Error('Failed to load records from PostgreSQL.', { cause: error });
+    throw new Error('Failed to load records from database.', { cause: error });
   }
 }
 
 // ---------- Admissions ----------
 export async function listAdmissionsDb(): Promise<StoredAdmissionRecord[]> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('admissions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ?? []).map((row) => mapSupabaseAdmission(row as Record<string, unknown>));
+    }
+
     const rows = await db.select().from(admissions).orderBy(desc(admissions.createdAt));
     return rows.map(mapRowToAdmission);
   } catch (error) {
     console.error('Database query failed in listAdmissionsDb:', error);
-    throw new Error('Failed to fetch admissions from PostgreSQL.', { cause: error });
+    throw new Error('Failed to fetch admissions from database.', { cause: error });
   }
 }
 
@@ -214,6 +373,22 @@ export async function findAdmissionByTrackingIdDb(
   trackingId: string,
 ): Promise<StoredAdmissionRecord | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('admissions')
+        .select('*')
+        .eq('tracking_id', trackingId)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data ? mapSupabaseAdmission(data as Record<string, unknown>) : null;
+    }
+
     const rows = await db
       .select()
       .from(admissions)
@@ -230,6 +405,55 @@ export async function insertAdmissionDb(
   record: StoredAdmissionRecord & { email?: string },
 ): Promise<StoredAdmissionRecord> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('admissions')
+        .insert({
+          id: record.id,
+          tracking_id: record.trackingId,
+          submitted_at: record.submittedAt,
+          submitted_at_iso: record.submittedAtIso,
+          student_name: record.studentName,
+          father_name: record.fatherName,
+          date_of_birth: record.dateOfBirth ?? '',
+          department: record.department,
+          department_id: record.departmentId ?? '',
+          class_name: record.className,
+          class_index: record.classIndex ?? 0,
+          residential_type: record.residentialType,
+          residential_key: record.residentialKey ?? 'boarding',
+          mobile: record.mobile,
+          email: record.email ?? '',
+          address: record.address,
+          status: record.status,
+          admin_note: record.adminNote,
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      await upsertUnifiedMadrasaRecord({
+        recordType: 'online_admission',
+        referenceCode: record.trackingId,
+        name: record.studentName,
+        fatherName: record.fatherName,
+        mobile: record.mobile,
+        email: record.email ?? '',
+        dateOfBirth: record.dateOfBirth ?? '',
+        department: record.department,
+        className: record.className,
+        residentialType: record.residentialType,
+        address: record.address,
+        status: record.status,
+      });
+
+      return mapSupabaseAdmission(data as Record<string, unknown>);
+    }
+
     const inserted = await db
       .insert(admissions)
       .values({
@@ -272,7 +496,7 @@ export async function insertAdmissionDb(
     return mapRowToAdmission(inserted[0]);
   } catch (error) {
     console.error('Database query failed in insertAdmissionDb:', error);
-    throw new Error('Failed to save online admission to PostgreSQL.', { cause: error });
+    throw new Error('Failed to save online admission to database.', { cause: error });
   }
 }
 
@@ -281,6 +505,41 @@ export async function updateAdmissionDb(
   patch: { status?: AdmissionStatus; adminNote?: string },
 ): Promise<StoredAdmissionRecord | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data: existing, error: findErr } = await supabase
+        .from('admissions')
+        .select('*')
+        .eq('id', id)
+        .limit(1)
+        .maybeSingle();
+
+      if (findErr) throw findErr;
+      if (!existing) return null;
+
+      const updateFields: Record<string, unknown> = {};
+      if (patch.status) updateFields.status = patch.status;
+      if (typeof patch.adminNote === 'string') updateFields.admin_note = patch.adminNote;
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('admissions')
+        .update(updateFields)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      if (patch.status && existing.tracking_id) {
+        await supabase
+          .from('madrasa_records')
+          .update({ status: patch.status, updated_at: new Date().toISOString() })
+          .eq('reference_code', String(existing.tracking_id));
+      }
+
+      return updated ? mapSupabaseAdmission(updated as Record<string, unknown>) : null;
+    }
+
     const existing = await db.select().from(admissions).where(eq(admissions.id, id)).limit(1);
     if (!existing[0]) return null;
 
@@ -303,25 +562,52 @@ export async function updateAdmissionDb(
     return updated[0] ? mapRowToAdmission(updated[0]) : null;
   } catch (error) {
     console.error('Database query failed in updateAdmissionDb:', error);
-    throw new Error('Failed to update admission record in PostgreSQL.', { cause: error });
+    throw new Error('Failed to update admission record in database.', { cause: error });
   }
 }
 
 export async function deleteAdmissionDb(id: string): Promise<boolean> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data: existing, error: findErr } = await supabase
+        .from('admissions')
+        .select('id')
+        .eq('id', id)
+        .limit(1)
+        .maybeSingle();
+      if (findErr) throw findErr;
+      if (!existing) return false;
+
+      const { error: delErr } = await supabase.from('admissions').delete().eq('id', id);
+      if (delErr) throw delErr;
+      return true;
+    }
+
     const existing = await db.select().from(admissions).where(eq(admissions.id, id)).limit(1);
     if (!existing[0]) return false;
     await db.delete(admissions).where(eq(admissions.id, id));
     return true;
   } catch (error) {
     console.error('Database query failed in deleteAdmissionDb:', error);
-    throw new Error('Failed to delete admission record from PostgreSQL.', { cause: error });
+    throw new Error('Failed to delete admission record from database.', { cause: error });
   }
 }
 
 // ---------- Students ----------
 export async function listStudentsDb(): Promise<DbStudentRecord[]> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []).map((row) => mapSupabaseStudent(row as Record<string, unknown>));
+    }
+
     const rows = await db.select().from(students).orderBy(desc(students.createdAt));
     return rows.map(mapRowToStudent);
   } catch (error) {
@@ -332,6 +618,19 @@ export async function listStudentsDb(): Promise<DbStudentRecord[]> {
 
 export async function findStudentByIdDb(id: string): Promise<DbStudentRecord | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('id', id)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ? mapSupabaseStudent(data as Record<string, unknown>) : null;
+    }
+
     const rows = await db.select().from(students).where(eq(students.id, id)).limit(1);
     return rows[0] ? mapRowToStudent(rows[0]) : null;
   } catch (error) {
@@ -345,6 +644,27 @@ export async function findStudentByPhoneOrEmailDb(
   email: string,
 ): Promise<DbStudentRecord | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data: byPhone, error: phoneErr } = await supabase
+        .from('students')
+        .select('*')
+        .eq('phone', phone)
+        .limit(1)
+        .maybeSingle();
+      if (phoneErr) throw phoneErr;
+      if (byPhone) return mapSupabaseStudent(byPhone as Record<string, unknown>);
+
+      const { data: byEmail, error: emailErr } = await supabase
+        .from('students')
+        .select('*')
+        .eq('email', email)
+        .limit(1)
+        .maybeSingle();
+      if (emailErr) throw emailErr;
+      return byEmail ? mapSupabaseStudent(byEmail as Record<string, unknown>) : null;
+    }
+
     const rows = await db
       .select()
       .from(students)
@@ -359,6 +679,19 @@ export async function findStudentByPhoneOrEmailDb(
 
 export async function findStudentByPhoneDb(phone: string): Promise<DbStudentRecord | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('phone', phone)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ? mapSupabaseStudent(data as Record<string, unknown>) : null;
+    }
+
     const rows = await db.select().from(students).where(eq(students.phone, phone)).limit(1);
     return rows[0] ? mapRowToStudent(rows[0]) : null;
   } catch (error) {
@@ -372,6 +705,31 @@ export async function findStudentByFirebaseUidOrEmailDb(
   email: string,
 ): Promise<DbStudentRecord | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data: byUid, error: uidErr } = await supabase
+        .from('students')
+        .select('*')
+        .eq('firebase_uid', uid)
+        .limit(1)
+        .maybeSingle();
+      if (uidErr) throw uidErr;
+      if (byUid) return mapSupabaseStudent(byUid as Record<string, unknown>);
+
+      if (email) {
+        const { data: byEmail, error: emailErr } = await supabase
+          .from('students')
+          .select('*')
+          .eq('email', email.toLowerCase())
+          .limit(1)
+          .maybeSingle();
+        if (emailErr) throw emailErr;
+        if (byEmail) return mapSupabaseStudent(byEmail as Record<string, unknown>);
+      }
+
+      return null;
+    }
+
     const rows = await db
       .select()
       .from(students)
@@ -407,6 +765,51 @@ export async function insertStudentDb(record: {
   lastLoginAt?: Date | null;
 }): Promise<DbStudentRecord> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('students')
+        .insert({
+          id: record.id,
+          student_roll: record.studentRoll,
+          firebase_uid: record.firebaseUid ?? '',
+          name: record.name,
+          father_name: record.fatherName ?? '',
+          email: record.email,
+          phone: record.phone,
+          department: record.department,
+          class_name: record.className,
+          session: record.session,
+          password_salt: record.passwordSalt,
+          password_hash: record.passwordHash,
+          tuition_records: record.tuitionRecords,
+          exam_routine: record.examRoutine,
+          exam_results: record.examResults,
+          last_login_at: (record.lastLoginAt ?? new Date()).toISOString(),
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      await upsertUnifiedMadrasaRecord({
+        recordType: record.firebaseUid ? 'google_signin' : 'student_account',
+        referenceCode: record.studentRoll,
+        name: record.name,
+        fatherName: record.fatherName ?? '',
+        mobile: record.phone,
+        email: record.email,
+        passwordHash: record.passwordHash ? `${record.passwordSalt}:${record.passwordHash}` : '',
+        department: record.department,
+        className: record.className,
+        firebaseUid: record.firebaseUid ?? '',
+        status: 'active',
+        lastLoginAt: record.lastLoginAt ?? new Date(),
+      });
+
+      return mapSupabaseStudent(data as Record<string, unknown>);
+    }
+
     const inserted = await db
       .insert(students)
       .values({
@@ -447,13 +850,47 @@ export async function insertStudentDb(record: {
     return mapRowToStudent(inserted[0]);
   } catch (error) {
     console.error('Database query failed in insertStudentDb:', error);
-    throw new Error('Failed to create student account in PostgreSQL.', { cause: error });
+    throw new Error('Failed to create student account in database.', { cause: error });
   }
 }
 
 export async function recordStudentLoginDb(student: DbStudentRecord, firebaseUid?: string) {
   try {
     const now = new Date();
+
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const updatePayload: Record<string, unknown> = {
+        last_login_at: now.toISOString(),
+      };
+      if (firebaseUid) {
+        updatePayload.firebase_uid = firebaseUid;
+      }
+
+      const { error } = await supabase
+        .from('students')
+        .update(updatePayload)
+        .eq('id', student.id);
+
+      if (error) throw error;
+
+      await upsertUnifiedMadrasaRecord({
+        recordType: firebaseUid ? 'google_signin' : 'student_account',
+        referenceCode: student.studentRoll,
+        name: student.name,
+        fatherName: student.fatherName,
+        mobile: student.phone,
+        email: student.email,
+        passwordHash: student.passwordHash ? `${student.passwordSalt}:${student.passwordHash}` : '',
+        department: student.department,
+        className: student.className,
+        firebaseUid: firebaseUid ?? student.firebaseUid,
+        status: 'active',
+        lastLoginAt: now,
+      });
+      return;
+    }
+
     await db
       .update(students)
       .set({
@@ -487,6 +924,17 @@ export async function updateStudentTuitionDb(
   tuitionRecords: TuitionRecord[],
 ): Promise<void> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('students')
+        .update({ tuition_records: tuitionRecords })
+        .eq('id', studentId);
+
+      if (error) throw error;
+      return;
+    }
+
     await db.update(students).set({ tuitionRecords }).where(eq(students.id, studentId));
   } catch (error) {
     console.error('Database query failed in updateStudentTuitionDb:', error);
@@ -494,14 +942,27 @@ export async function updateStudentTuitionDb(
   }
 }
 
-// ---------- CMS & Admin State ----------
+// ---------- CMS & Key-Value State ----------
 export async function getCmsStateValueDb<T>(key: string): Promise<T | null> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('cms_state')
+        .select('payload')
+        .eq('key', key)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ? (data.payload as T) : null;
+    }
+
     const rows = await db.select().from(cmsState).where(eq(cmsState.key, key)).limit(1);
     return rows[0] ? (rows[0].payload as unknown as T) : null;
   } catch (error) {
     console.error(`Database query failed in getCmsStateValueDb(${key}):`, error);
-    throw new Error('Failed to read application state from PostgreSQL.', { cause: error });
+    throw new Error('Failed to read application state from database.', { cause: error });
   }
 }
 
@@ -510,6 +971,21 @@ export async function setCmsStateValueDb(
   payload: Record<string, unknown>,
 ): Promise<void> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase.from('cms_state').upsert(
+        {
+          key,
+          payload,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' },
+      );
+
+      if (error) throw error;
+      return;
+    }
+
     const now = new Date();
     await db
       .insert(cmsState)
@@ -527,15 +1003,22 @@ export async function setCmsStateValueDb(
       });
   } catch (error) {
     console.error(`Database query failed in setCmsStateValueDb(${key}):`, error);
-    throw new Error('Failed to persist application state in PostgreSQL.', { cause: error });
+    throw new Error('Failed to persist application state in database.', { cause: error });
   }
 }
 
 export async function deleteCmsStateValueDb(key: string): Promise<void> {
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase.from('cms_state').delete().eq('key', key);
+      if (error) throw error;
+      return;
+    }
+
     await db.delete(cmsState).where(eq(cmsState.key, key));
   } catch (error) {
     console.error(`Database query failed in deleteCmsStateValueDb(${key}):`, error);
-    throw new Error('Failed to remove state key from PostgreSQL.', { cause: error });
+    throw new Error('Failed to remove state key from database.', { cause: error });
   }
 }

@@ -1790,18 +1790,7 @@ export default function App() {
 
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569] sm:flex-row">
             <p>{copy.footerCopyright}</p>
-            <div className="flex items-center gap-4">
-              <p>{copy.footerMotto}</p>
-              <span aria-hidden="true" className="text-slate-300">
-                ·
-              </span>
-              <a
-                href="/admin"
-                className="font-medium text-[#065F46] underline-offset-4 hover:underline"
-              >
-                {lang === 'en' ? 'Admin Panel' : 'অ্যাডমিন প্যানেল'}
-              </a>
-            </div>
+            <p>{copy.footerMotto}</p>
           </div>
         </div>
       </footer>

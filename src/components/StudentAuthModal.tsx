@@ -62,6 +62,16 @@ export function StudentAuthModal({
     setErrorMsg('');
   };
 
+  const safeReadJson = async <T,>(response: Response): Promise<T | null> => {
+    const text = await response.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return null;
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     if (loading || googleLoading) return;
     setErrorMsg('');
@@ -81,13 +91,13 @@ export function StudentAuthModal({
           fatherName: regFatherName.trim() || undefined,
         }),
       });
-      const data = (await response.json()) as {
+      const data = await safeReadJson<{
         token?: string;
         student?: StudentUser;
         error?: string;
-      };
-      if (!response.ok || !data.token || !data.student) {
-        setErrorMsg(data.error ?? a.errGoogleFailed);
+      }>(response);
+      if (!response.ok || !data?.token || !data?.student) {
+        setErrorMsg(data?.error ?? a.errGoogleFailed);
         return;
       }
       onAuthSuccess(data.token, data.student);
@@ -124,13 +134,13 @@ export function StudentAuthModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: cleanPhone, password: loginPassword }),
       });
-      const data = (await response.json()) as {
+      const data = await safeReadJson<{
         token?: string;
         student?: StudentUser;
         error?: string;
-      };
-      if (!response.ok || !data.token || !data.student) {
-        setErrorMsg(data.error ?? a.errLoginFailed);
+      }>(response);
+      if (!response.ok || !data?.token || !data?.student) {
+        setErrorMsg(data?.error ?? a.errLoginFailed);
         return;
       }
       onAuthSuccess(data.token, data.student);
@@ -188,13 +198,13 @@ export function StudentAuthModal({
           confirmPassword: regConfirmPassword,
         }),
       });
-      const data = (await response.json()) as {
+      const data = await safeReadJson<{
         token?: string;
         student?: StudentUser;
         error?: string;
-      };
-      if (!response.ok || !data.token || !data.student) {
-        setErrorMsg(data.error ?? a.errRegFailed);
+      }>(response);
+      if (!response.ok || !data?.token || !data?.student) {
+        setErrorMsg(data?.error ?? a.errRegFailed);
         return;
       }
       onAuthSuccess(data.token, data.student);

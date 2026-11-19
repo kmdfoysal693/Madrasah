@@ -3,6 +3,7 @@ import type { DecodedIdToken } from 'firebase-admin/auth';
 import { adminAuth } from '../lib/firebase-admin.ts';
 import { getOrCreateUser } from '../db/users.ts';
 import { isSqlConfigured } from '../db/index.ts';
+import { isSupabaseConfigured } from '../db/supabase.ts';
 
 export interface AuthRequest extends Request {
   user?: DecodedIdToken;
@@ -19,7 +20,7 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const decodedToken = await adminAuth.verifyIdToken(token);
     req.user = decodedToken;
-    if (isSqlConfigured()) {
+    if (isSupabaseConfigured() || isSqlConfigured()) {
       await getOrCreateUser(
         decodedToken.uid,
         decodedToken.email ?? '',
