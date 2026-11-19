@@ -2,50 +2,30 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 declare global {
   var _supabaseAdminClient: SupabaseClient | undefined;
+  var _supabaseRuntimeDisabled: boolean | undefined;
 }
 
-const DEFAULT_PUBLIC_SUPABASE_URL = 'https://kjpghibnggzvfbeozxiq.supabase.co';
-const DEFAULT_PUBLIC_SUPABASE_PUBLISHABLE_KEY =
-  'sb_publishable_6mbpT-gFs03LmnXngWBiWw_Eq3Y5CA0';
-
-function normalizeSupabaseApiUrl(raw: string | undefined): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (!trimmed || trimmed.includes('YOUR_PROJECT_REF')) return '';
-
-  // Handle accidental Supabase Dashboard URL (e.g. https://supabase.com/dashboard/project/<ref>)
-  const dashMatch = trimmed.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);
-  if (dashMatch?.[1]) {
-    return `https://${dashMatch[1]}.supabase.co`;
+function isValidSupabaseProjectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === 'https:' &&
+      /\.supabase\.(co|in)$/i.test(parsed.hostname)
+    );
+  } catch {
+    return false;
   }
-
-  // Accept valid Supabase API project URLs (with or without /rest/v1)
-  const apiMatch = trimmed.match(/^(https:\/\/[a-z0-9-]+\.supabase\.co)/i);
-  if (apiMatch?.[1]) {
-    return apiMatch[1];
-  }
-
-  return '';
 }
 
-function isValidSupabaseKey(raw: string | undefined): raw is string {
-  if (!raw) return false;
-  const trimmed = raw.trim();
-  if (!trimmed) return false;
-  if (trimmed.startsWith('YOUR_') || trimmed.startsWith('SUPABASE_')) return false;
-  return (
-    trimmed.startsWith('eyJ') ||
-    trimmed.startsWith('sb_secret_') ||
-    trimmed.startsWith('sb_publishable_')
-  );
+function isValidSupabaseApiKey(key: string): boolean {
+  return /^(eyJ|sb_secret_|sb_publishable_)/.test(key);
 }
 
 function getSupabaseServerUrl(): string {
-  return (
-    normalizeSupabaseApiUrl(process.env.SUPABASE_URL) ||
-    normalizeSupabaseApiUrl(process.env.VITE_SUPABASE_URL) ||
-    DEFAULT_PUBLIC_SUPABASE_URL
-  );
+  const raw = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  if (!raw) return '';
+  const normalized = raw.replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+  return isValidSupabaseProjectUrl(normalized) ? normalized : '';
 }
 
 function getSupabaseServerKey(): string {
@@ -55,30 +35,24 @@ function getSupabaseServerKey(): string {
     process.env.SUPABASE_PUBLISHABLE_KEY,
     process.env.SUPABASE_ANON_KEY,
   ];
-  for (const candidate of candidates) {
-    if (isValidSupabaseKey(candidate)) {
-      return candidate.trim();
+  for (const raw of candidates) {
+    const trimmed = (raw ?? '').trim();
+    if (trimmed && isValidSupabaseApiKey(trimmed)) {
+      return trimmed;
     }
   }
-  return DEFAULT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  return '';
 }
 
 export function isSupabaseConfigured(): boolean {
+  if (global._supabaseRuntimeDisabled) {
+    return false;
+  }
   return Boolean(getSupabaseServerUrl() && getSupabaseServerKey());
 }
 
-export function isSupabaseRlsError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const errObj = error as { code?: unknown; message?: unknown; cause?: unknown };
-  if (errObj.code === '42501') return true;
-  if (
-    typeof errObj.message === 'string' &&
-    errObj.message.toLowerCase().includes('row-level security')
-  ) {
-    return true;
-  }
-  if (errObj.cause) return isSupabaseRlsError(errObj.cause);
-  return false;
+export function markSupabaseUnavailable(): void {
+  global._supabaseRuntimeDisabled = true;
 }
 
 export function getSupabaseAdmin(): SupabaseClient {
@@ -87,7 +61,9 @@ export function getSupabaseAdmin(): SupabaseClient {
     const key = getSupabaseServerKey();
 
     if (!url || !key) {
-      throw new Error('Supabase URL and API key must be configured.');
+      throw new Error(
+        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_PUBLISHABLE_KEY) must be valid.',
+      );
     }
 
     global._supabaseAdminClient = createClient(url, key, {
@@ -100,3 +76,24 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   return global._supabaseAdminClient;
 }
+
+export function isSupabaseRlsError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current; depth++) {
+    if (typeof current === 'object' && current !== null) {
+      const rec = current as { code?: unknown; message?: unknown; cause?: unknown };
+      if (rec.code === '42501') return true;
+      if (
+        typeof rec.message === 'string' &&
+        rec.message.toLowerCase().includes('row-level security')
+      ) {
+        return true;
+      }
+      current = rec.cause;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+

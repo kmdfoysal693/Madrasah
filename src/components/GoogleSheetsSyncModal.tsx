@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import {
+  Check,
   CheckCircle2,
+  ChevronDown,
+  Copy,
   ExternalLink,
   FileSpreadsheet,
   Loader2,
@@ -17,6 +20,17 @@ import {
   initSheetsAuth,
   logoutSheetsAuth,
 } from '../lib/firebase';
+import {
+  ensureSheetTabExists,
+  extractSpreadsheetId,
+  fetchSpreadsheetMetadata,
+  findMatchingSheet2Tab,
+  getAdmissionSheetHeader,
+  getSavedSheetsConfig,
+  getStudentSheetHeader,
+  quoteSheetTab,
+  saveSheetsConfig,
+} from '../lib/googleSheetsSync';
 
 interface UnifiedExportRecord {
   id: number;
@@ -45,33 +59,50 @@ interface GoogleSheetsSyncModalProps {
   onClose: () => void;
 }
 
-interface SheetMetadataResponse {
-  properties?: { title?: string };
-  sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
-}
+type ExistingSyncMode = 'split' | 'students_only' | 'combined';
 
 type PendingConfirmation =
   | {
       mode: 'create';
       title: string;
-      rowCount: number;
+      admissionTab: string;
+      studentTab: string;
+      admissionCount: number;
+      studentCount: number;
     }
   | {
       mode: 'update';
+      syncMode: ExistingSyncMode;
       spreadsheetId: string;
       spreadsheetTitle: string;
-      tabName: string;
-      rowCount: number;
+      admissionTab: string;
+      studentTab: string;
+      needsCreateStudentTab: boolean;
+      combinedTab: string;
+      admissionCount: number;
+      studentCount: number;
+      totalCount: number;
     };
 
-function extractSpreadsheetId(input: string): string {
-  const trimmed = input.trim();
-  const urlMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (urlMatch?.[1]) {
-    return urlMatch[1];
+const APPS_SCRIPT_CODE = `function doPost(e) {
+  var payload = JSON.parse(e.postData.contents || '{}');
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var isStudent = payload.targetSheet === 'Sheet2';
+  var sheet = isStudent
+    ? (ss.getSheetByName('Sheet2') || ss.insertSheet('Sheet2'))
+    : ss.getSheets()[0];
+
+  if (sheet.getLastRow() === 0 && payload.headers) {
+    sheet.appendRow(payload.headers);
+    sheet.setFrozenRows(1);
   }
-  return trimmed;
-}
+  if (payload.row) {
+    sheet.appendRow(payload.row);
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
 
 function formatRecordTypeLabel(type: string, lang: Language): string {
   if (lang === 'en') {
@@ -82,8 +113,12 @@ function formatRecordTypeLabel(type: string, lang: Language): string {
   }
   if (type === 'online_admission') return 'অনলাইন ভর্তি আবেদন';
   if (type === 'google_signin') return 'Google লগইন';
-  if (type === 'student_account') return 'শিক্ষার্থী নিবন্ধন';
+  if (type === 'student_account') return 'ছাত্র রেজিস্ট্রেশন';
   return type;
+}
+
+function isStudentRegistrationRecord(record: UnifiedExportRecord): boolean {
+  return record.recordType === 'student_account' || record.recordType === 'google_signin';
 }
 
 export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyncModalProps) {
@@ -96,16 +131,14 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
   const [records, setRecords] = useState<UnifiedExportRecord[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
-  const [sheetInput, setSheetInput] = useState(() => {
-    try {
-      return localStorage.getItem('madrasa_sheet_id') ?? '';
-    } catch {
-      return '';
-    }
-  });
-  const [spreadsheetTitle, setSpreadsheetTitle] = useState('');
+  const initialConfig = getSavedSheetsConfig();
+  const [sheetInput, setSheetInput] = useState(initialConfig?.spreadsheetId ?? '');
+  const [spreadsheetTitle, setSpreadsheetTitle] = useState(initialConfig?.spreadsheetTitle ?? '');
   const [availableTabs, setAvailableTabs] = useState<string[]>([]);
-  const [selectedTab, setSelectedTab] = useState('');
+  const [syncMode, setSyncMode] = useState<ExistingSyncMode>('split');
+  const [admissionTab, setAdmissionTab] = useState(initialConfig?.admissionTab ?? '');
+  const [studentTab, setStudentTab] = useState(initialConfig?.studentTab || 'Sheet2');
+  const [combinedTab, setCombinedTab] = useState(initialConfig?.admissionTab ?? '');
   const [loadingMeta, setLoadingMeta] = useState(false);
 
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirmation | null>(null);
@@ -113,6 +146,11 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
   const [syncedSheetUrl, setSyncedSheetUrl] = useState('');
   const [syncedMessage, setSyncedMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [showWebhookGuide, setShowWebhookGuide] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+
+  const admissionRecords = records.filter((r) => r.recordType === 'online_admission');
+  const studentRegistrationRecords = records.filter(isStudentRegistrationRecord);
 
   useEffect(() => {
     const unsubscribe = initSheetsAuth(
@@ -146,7 +184,9 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
         headers: { Authorization: `Bearer ${firebaseIdToken}` },
       });
       const text = await res.text();
-      const parsed = text ? (JSON.parse(text) as { records?: UnifiedExportRecord[]; error?: string }) : {};
+      const parsed = text
+        ? (JSON.parse(text) as { records?: UnifiedExportRecord[]; error?: string })
+        : {};
       if (!res.ok) {
         throw new Error(parsed.error || 'ডাটা লোড করা যায়নি।');
       }
@@ -159,11 +199,11 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
   };
 
   useEffect(() => {
-    if (!isOpen || !sheetsUser || !accessToken) return;
+    if (!isOpen || !sheetsUser || !accessToken || idToken) return;
     let cancelled = false;
     (async () => {
       try {
-        const freshIdToken = idToken || (await sheetsUser.getIdToken());
+        const freshIdToken = await sheetsUser.getIdToken();
         if (!cancelled) {
           setIdToken(freshIdToken);
           await fetchRecords(freshIdToken);
@@ -192,8 +232,13 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
       setIdToken(res.idToken);
       await fetchRecords(res.idToken);
     } catch (err) {
+      const code = (err as { code?: string })?.code ?? '';
       const msg = err instanceof Error ? err.message : '';
-      if (!msg.includes('popup-closed-by-user')) {
+      if (
+        code !== 'auth/popup-closed-by-user' &&
+        code !== 'auth/cancelled-popup-request' &&
+        !msg.includes('popup-closed-by-user')
+      ) {
         setErrorMsg(
           isEn
             ? 'Could not connect Google account. Please allow the popup and grant spreadsheet access.'
@@ -212,14 +257,52 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
     setIdToken(null);
     setRecords([]);
     setAvailableTabs([]);
-    setSelectedTab('');
-    setSpreadsheetTitle('');
     setPendingConfirm(null);
     setSyncedMessage('');
     setSyncedSheetUrl('');
   };
 
-  const buildSheetRows = (rows: UnifiedExportRecord[]): string[][] => {
+  const buildAdmissionRows = (rows: UnifiedExportRecord[]): string[][] => {
+    const header = getAdmissionSheetHeader();
+    const body = rows.map((r) => [
+      String(r.id),
+      r.referenceCode,
+      r.name,
+      r.fatherName,
+      r.dateOfBirth,
+      r.department,
+      r.className,
+      r.residentialType,
+      r.mobile,
+      r.email,
+      r.address,
+      r.status,
+      r.createdAt,
+    ]);
+    return [header, ...body];
+  };
+
+  const buildStudentRegistrationRows = (rows: UnifiedExportRecord[]): string[][] => {
+    const header = getStudentSheetHeader();
+    const body = rows.map((r) => [
+      String(r.id),
+      formatRecordTypeLabel(r.recordType, lang),
+      r.referenceCode,
+      r.name,
+      r.fatherName,
+      r.mobile,
+      r.email,
+      r.passwordHash,
+      r.department,
+      r.className,
+      r.status,
+      r.lastLoginAt ?? '',
+      r.createdAt,
+    ]);
+    return [header, ...body];
+  };
+
+  const buildCombinedRows = (rows: UnifiedExportRecord[]): string[][] => {
     const header = [
       'ID',
       'ধরন (Record Type)',
@@ -277,34 +360,23 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
     setSyncedMessage('');
     setLoadingMeta(true);
     try {
-      const res = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sid)}?fields=properties.title,sheets.properties.title`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        },
-      );
-      const data = (await res.json()) as SheetMetadataResponse & {
-        error?: { message?: string };
-      };
-      if (!res.ok) {
-        throw new Error(
-          data.error?.message ||
-            (isEn
-              ? 'Could not access this Google Sheet. Make sure you have edit access.'
-              : 'এই Google Sheet-এ প্রবেশ করা যায়নি। আপনার অ্যাকাউন্টে এডিট করার অনুমতি আছে কিনা যাচাই করুন।'),
-        );
-      }
-      const tabs = (data.sheets ?? [])
-        .map((s) => s.properties?.title)
-        .filter((t): t is string => Boolean(t));
-      setSpreadsheetTitle(data.properties?.title || sid);
-      setAvailableTabs(tabs);
-      setSelectedTab(tabs[0] ?? '');
-      try {
-        localStorage.setItem('madrasa_sheet_id', sid);
-      } catch {
-        // ignore storage errors
-      }
+      const meta = await fetchSpreadsheetMetadata(accessToken, sid);
+      const matchedSheet2 = findMatchingSheet2Tab(meta.tabs);
+      const nextAdmissionTab = meta.tabs[0] ?? '';
+      const nextStudentTab = matchedSheet2 ?? 'Sheet2';
+
+      setSpreadsheetTitle(meta.title);
+      setAvailableTabs(meta.tabs);
+      setAdmissionTab(nextAdmissionTab);
+      setCombinedTab(nextAdmissionTab);
+      setStudentTab(nextStudentTab);
+
+      saveSheetsConfig({
+        spreadsheetId: sid,
+        spreadsheetTitle: meta.title,
+        admissionTab: nextAdmissionTab,
+        studentTab: nextStudentTab,
+      });
     } catch (err) {
       setErrorMsg(
         err instanceof Error
@@ -324,28 +396,85 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
     setSyncedMessage('');
     const latestIdToken = idToken || (await sheetsUser.getIdToken());
     const latest = await fetchRecords(latestIdToken);
+    const admCount = latest.filter((r) => r.recordType === 'online_admission').length;
+    const stuCount = latest.filter(isStudentRegistrationRecord).length;
+
     setPendingConfirm({
       mode: 'create',
       title: 'Darus Salam Madrasa — Student & Admission Records',
-      rowCount: latest.length,
+      admissionTab: 'OnlineAdmissions',
+      studentTab: 'Sheet2',
+      admissionCount: admCount,
+      studentCount: stuCount,
     });
   };
 
   const handleRequestUpdateSheet = async () => {
-    if (!sheetsUser || !selectedTab) return;
+    if (!sheetsUser) return;
     const sid = extractSpreadsheetId(sheetInput);
     if (!sid) return;
+    if (syncMode === 'split' && (!admissionTab || !studentTab)) return;
+    if (syncMode === 'students_only' && !studentTab) return;
+    if (syncMode === 'combined' && !combinedTab) return;
+
     setErrorMsg('');
     setSyncedMessage('');
     const latestIdToken = idToken || (await sheetsUser.getIdToken());
     const latest = await fetchRecords(latestIdToken);
+    const admCount = latest.filter((r) => r.recordType === 'online_admission').length;
+    const stuCount = latest.filter(isStudentRegistrationRecord).length;
+    const needsCreateStudentTab =
+      (syncMode === 'split' || syncMode === 'students_only') && !availableTabs.includes(studentTab);
+
     setPendingConfirm({
       mode: 'update',
+      syncMode,
       spreadsheetId: sid,
       spreadsheetTitle: spreadsheetTitle || sid,
-      tabName: selectedTab,
-      rowCount: latest.length,
+      admissionTab,
+      studentTab,
+      needsCreateStudentTab,
+      combinedTab,
+      admissionCount: admCount,
+      studentCount: stuCount,
+      totalCount: latest.length,
     });
+  };
+
+  const writeValuesToTab = async (
+    spreadsheetId: string,
+    tabTitle: string,
+    values: string[][],
+  ) => {
+    const clearRange = `${quoteSheetTab(tabTitle)}!A:Z`;
+    const clearRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(clearRange)}:clear`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    if (!clearRes.ok) {
+      const clearErr = (await clearRes.json()) as { error?: { message?: string } };
+      throw new Error(clearErr.error?.message || `"${tabTitle}" ট্যাব প্রস্তুত করা যায়নি।`);
+    }
+
+    const writeRange = `${quoteSheetTab(tabTitle)}!A1`;
+    const updateRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(writeRange)}?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ values }),
+      },
+    );
+    if (!updateRes.ok) {
+      const updateErr = (await updateRes.json()) as { error?: { message?: string } };
+      throw new Error(updateErr.error?.message || `"${tabTitle}" ট্যাবে ডাটা লেখা যায়নি।`);
+    }
   };
 
   const executeConfirmedSync = async () => {
@@ -353,10 +482,11 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
     setSyncing(true);
     setErrorMsg('');
     try {
-      const values = buildSheetRows(records);
+      const admRows = buildAdmissionRows(admissionRecords);
+      const stuRows = buildStudentRegistrationRows(studentRegistrationRecords);
+      const allRows = buildCombinedRows(records);
 
       if (pendingConfirm.mode === 'create') {
-        const tabName = 'MadrasaRecords';
         const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
           method: 'POST',
           headers: {
@@ -368,7 +498,13 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
             sheets: [
               {
                 properties: {
-                  title: tabName,
+                  title: pendingConfirm.admissionTab,
+                  gridProperties: { frozenRowCount: 1 },
+                },
+              },
+              {
+                properties: {
+                  title: pendingConfirm.studentTab,
                   gridProperties: { frozenRowCount: 1 },
                 },
               },
@@ -384,77 +520,113 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
           throw new Error(created.error?.message || 'নতুন Google Sheet তৈরি করা যায়নি।');
         }
 
-        const writeRes = await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(created.spreadsheetId)}/values/${encodeURIComponent(tabName)}!A1?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ values }),
-          },
-        );
-        if (!writeRes.ok) {
-          const writeErr = (await writeRes.json()) as { error?: { message?: string } };
-          throw new Error(writeErr.error?.message || 'শিটে ডাটা লেখা যায়নি।');
-        }
+        await writeValuesToTab(created.spreadsheetId, pendingConfirm.admissionTab, admRows);
+        await writeValuesToTab(created.spreadsheetId, pendingConfirm.studentTab, stuRows);
 
         setSheetInput(created.spreadsheetId);
         setSpreadsheetTitle(pendingConfirm.title);
-        setAvailableTabs([tabName]);
-        setSelectedTab(tabName);
-        try {
-          localStorage.setItem('madrasa_sheet_id', created.spreadsheetId);
-        } catch {
-          // ignore
-        }
+        setAvailableTabs([pendingConfirm.admissionTab, pendingConfirm.studentTab]);
+        setAdmissionTab(pendingConfirm.admissionTab);
+        setStudentTab(pendingConfirm.studentTab);
+        setCombinedTab(pendingConfirm.admissionTab);
+
+        saveSheetsConfig({
+          spreadsheetId: created.spreadsheetId,
+          spreadsheetTitle: pendingConfirm.title,
+          admissionTab: pendingConfirm.admissionTab,
+          studentTab: pendingConfirm.studentTab,
+        });
+
         const url =
           created.spreadsheetUrl ||
           `https://docs.google.com/spreadsheets/d/${created.spreadsheetId}/edit`;
         setSyncedSheetUrl(url);
         setSyncedMessage(
           isEn
-            ? `Created new Google Sheet and synced ${records.length} record(s).`
-            : `নতুন Google Sheet তৈরি করে মোট ${records.length}টি তথ্য সফলভাবে যুক্ত করা হয়েছে!`,
+            ? `Created new Google Sheet with "${pendingConfirm.admissionTab}" (${admissionRecords.length} admissions) and "${pendingConfirm.studentTab}" (${studentRegistrationRecords.length} student registrations).`
+            : `নতুন Google Sheet তৈরি হয়েছে: "${pendingConfirm.admissionTab}" ট্যাবে ${admissionRecords.length}টি ভর্তি আবেদন এবং "${pendingConfirm.studentTab}" ট্যাবে ${studentRegistrationRecords.length}টি ছাত্র রেজিস্ট্রেশন সংরক্ষিত হয়েছে!`,
         );
       } else {
-        const range = `${pendingConfirm.tabName}!A1`;
-        const clearRes = await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(pendingConfirm.spreadsheetId)}/values/${encodeURIComponent(pendingConfirm.tabName)}:clear`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
-          },
-        );
-        if (!clearRes.ok) {
-          const clearErr = (await clearRes.json()) as { error?: { message?: string } };
-          throw new Error(clearErr.error?.message || 'শিটের ট্যাব প্রস্তুত করা যায়নি।');
+        let updatedTabs = [...availableTabs];
+
+        if (pendingConfirm.syncMode === 'split') {
+          if (pendingConfirm.studentTab !== pendingConfirm.admissionTab) {
+            updatedTabs = await ensureSheetTabExists(
+              accessToken,
+              pendingConfirm.spreadsheetId,
+              pendingConfirm.studentTab,
+              updatedTabs,
+            );
+            await writeValuesToTab(
+              pendingConfirm.spreadsheetId,
+              pendingConfirm.admissionTab,
+              admRows,
+            );
+            await writeValuesToTab(
+              pendingConfirm.spreadsheetId,
+              pendingConfirm.studentTab,
+              stuRows,
+            );
+            setSyncedMessage(
+              isEn
+                ? `Synced ${admissionRecords.length} admission(s) to "${pendingConfirm.admissionTab}" and ${studentRegistrationRecords.length} student registration(s) to "${pendingConfirm.studentTab}".`
+                : `"${pendingConfirm.admissionTab}" ট্যাবে ${admissionRecords.length}টি ভর্তি আবেদন এবং "${pendingConfirm.studentTab}" ট্যাবে ${studentRegistrationRecords.length}টি ছাত্র রেজিস্ট্রেশন সফলভাবে সংরক্ষিত হয়েছে!`,
+            );
+          } else {
+            await writeValuesToTab(
+              pendingConfirm.spreadsheetId,
+              pendingConfirm.admissionTab,
+              allRows,
+            );
+            setSyncedMessage(
+              isEn
+                ? `Synced ${records.length} record(s) to "${pendingConfirm.admissionTab}".`
+                : `"${pendingConfirm.admissionTab}" ট্যাবে মোট ${records.length}টি তথ্য সফলভাবে যুক্ত করা হয়েছে!`,
+            );
+          }
+          saveSheetsConfig({
+            spreadsheetId: pendingConfirm.spreadsheetId,
+            spreadsheetTitle: pendingConfirm.spreadsheetTitle,
+            admissionTab: pendingConfirm.admissionTab,
+            studentTab: pendingConfirm.studentTab,
+          });
+        } else if (pendingConfirm.syncMode === 'students_only') {
+          updatedTabs = await ensureSheetTabExists(
+            accessToken,
+            pendingConfirm.spreadsheetId,
+            pendingConfirm.studentTab,
+            updatedTabs,
+          );
+          await writeValuesToTab(pendingConfirm.spreadsheetId, pendingConfirm.studentTab, stuRows);
+          setSyncedMessage(
+            isEn
+              ? `Synced ${studentRegistrationRecords.length} student registration(s) to "${pendingConfirm.studentTab}".`
+              : `"${pendingConfirm.studentTab}" ট্যাবে ${studentRegistrationRecords.length}টি ছাত্র রেজিস্ট্রেশনের তথ্য সফলভাবে সংরক্ষিত হয়েছে!`,
+          );
+          saveSheetsConfig({
+            spreadsheetId: pendingConfirm.spreadsheetId,
+            spreadsheetTitle: pendingConfirm.spreadsheetTitle,
+            admissionTab: admissionTab || updatedTabs[0] || '',
+            studentTab: pendingConfirm.studentTab,
+          });
+        } else {
+          await writeValuesToTab(pendingConfirm.spreadsheetId, pendingConfirm.combinedTab, allRows);
+          setSyncedMessage(
+            isEn
+              ? `Successfully updated "${pendingConfirm.combinedTab}" with ${records.length} record(s).`
+              : `"${pendingConfirm.combinedTab}" ট্যাবে মোট ${records.length}টি তথ্য সফলভাবে যুক্ত করা হয়েছে!`,
+          );
+          saveSheetsConfig({
+            spreadsheetId: pendingConfirm.spreadsheetId,
+            spreadsheetTitle: pendingConfirm.spreadsheetTitle,
+            admissionTab: pendingConfirm.combinedTab,
+            studentTab: studentTab || 'Sheet2',
+          });
         }
 
-        const updateRes = await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(pendingConfirm.spreadsheetId)}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ values }),
-          },
-        );
-        if (!updateRes.ok) {
-          const updateErr = (await updateRes.json()) as { error?: { message?: string } };
-          throw new Error(updateErr.error?.message || 'Google Sheet আপডেট করা যায়নি।');
-        }
-
+        setAvailableTabs(updatedTabs);
         const url = `https://docs.google.com/spreadsheets/d/${pendingConfirm.spreadsheetId}/edit`;
         setSyncedSheetUrl(url);
-        setSyncedMessage(
-          isEn
-            ? `Successfully updated "${pendingConfirm.tabName}" with ${records.length} record(s).`
-            : `"${pendingConfirm.tabName}" ট্যাবে মোট ${records.length}টি তথ্য সফলভাবে যুক্ত করা হয়েছে!`,
-        );
       }
 
       setPendingConfirm(null);
@@ -470,6 +642,22 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
       setSyncing(false);
     }
   };
+
+  const handleCopyScript = async () => {
+    try {
+      await navigator.clipboard.writeText(APPS_SCRIPT_CODE);
+      setCopiedScript(true);
+      window.setTimeout(() => setCopiedScript(false), 2000);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const studentTabOptions = availableTabs.some((t) => /^sheet\s*2$/i.test(t.trim()))
+    ? availableTabs
+    : [...availableTabs, 'Sheet2'];
+
+  const activeSavedConfig = getSavedSheetsConfig();
 
   return (
     <div
@@ -516,7 +704,10 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
           {syncedMessage && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#065F46]" aria-hidden="true" />
+                <CheckCircle2
+                  className="mt-0.5 h-4 w-4 shrink-0 text-[#065F46]"
+                  aria-hidden="true"
+                />
                 <div className="space-y-2">
                   <p className="font-semibold">{syncedMessage}</p>
                   {syncedSheetUrl && (
@@ -539,8 +730,8 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
             <div className="space-y-4 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-5 text-center">
               <p className="text-sm text-[#334155]">
                 {isEn
-                  ? 'Sign in with your Google account to create a Google Sheet or append all online admissions and student records to an existing sheet.'
-                  : 'অনলাইন ভর্তি আবেদন ও শিক্ষার্থী লগইন/নিবন্ধনের সকল তথ্য সরাসরি আপনার Google Sheet-এ যুক্ত করতে আপনার Google অ্যাকাউন্ট দিয়ে সাইন-ইন করুন।'}
+                  ? 'Sign in with your Google account to save online admissions and student registrations directly into separate tabs (including Sheet2) of your Google Sheet.'
+                  : 'অনলাইন ভর্তি আবেদন ও ছাত্র রেজিস্ট্রেশনের সকল তথ্য সরাসরি আপনার Google Sheet-এ (ছাত্র রেজিস্ট্রেশন Sheet2-এ) সংরক্ষণ করতে আপনার Google অ্যাকাউন্ট দিয়ে সাইন-ইন করুন।'}
               </p>
               <div className="flex justify-center">
                 <button
@@ -575,7 +766,13 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                       <path fill="none" d="M0 0h48v48H0z" />
                     </svg>
                   </span>
-                  <span>{signingIn ? (isEn ? 'Connecting...' : 'সংযুক্ত হচ্ছে...') : 'Sign in with Google'}</span>
+                  <span>
+                    {signingIn
+                      ? isEn
+                        ? 'Connecting...'
+                        : 'সংযুক্ত হচ্ছে...'
+                      : 'Sign in with Google'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -595,8 +792,8 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                           ? 'Loading records...'
                           : 'তথ্য লোড হচ্ছে...'
                         : isEn
-                          ? `${records.length} record(s) ready`
-                          : `মোট ${records.length}টি রেকর্ড প্রস্তুত`}
+                          ? `${admissionRecords.length} admission(s), ${studentRegistrationRecords.length} student registration(s)`
+                          : `ভর্তি আবেদন: ${admissionRecords.length}টি · ছাত্র রেজিস্ট্রেশন: ${studentRegistrationRecords.length}টি`}
                     </span>
                   </p>
                 </div>
@@ -624,21 +821,72 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                 </div>
               </div>
 
+              {activeSavedConfig?.spreadsheetId && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-950">
+                  <span className="font-semibold text-[#065F46]">
+                    {isEn ? 'Linked Sheet Active:' : 'লিংক করা শিট সক্রিয়:'}
+                  </span>{' '}
+                  {activeSavedConfig.spreadsheetTitle} —{' '}
+                  {isEn
+                    ? `New forms can save straight to "${activeSavedConfig.admissionTab || 'Tab 1'}" & "${activeSavedConfig.studentTab || 'Sheet2'}".`
+                    : `এখন নতুন ফর্ম পূরণ করলেই সরাসরি "${activeSavedConfig.admissionTab || '১ম ট্যাব'}" ও "${activeSavedConfig.studentTab || 'Sheet2'}"-এ সেভ করতে পারবেন।`}
+                </div>
+              )}
+
               {/* Explicit Confirmation Dialog before writing to Google Sheets */}
               {pendingConfirm ? (
                 <div className="space-y-4 rounded-xl border border-amber-300 bg-amber-50 p-5">
                   <h3 className="font-serif text-base font-bold text-[#0F172A]">
-                    {isEn ? 'Confirm Google Sheet Update' : 'Google Sheet-এ ডাটা লেখার অনুমতি নিশ্চিত করুন'}
+                    {isEn
+                      ? 'Confirm Google Sheet Update'
+                      : 'Google Sheet-এ ডাটা লেখার অনুমতি নিশ্চিত করুন'}
                   </h3>
-                  <p className="text-sm text-[#334155]">
-                    {pendingConfirm.mode === 'create'
-                      ? isEn
-                        ? `Create a new Google Sheet named "${pendingConfirm.title}" and write ${pendingConfirm.rowCount} record(s) into it?`
-                        : `"${pendingConfirm.title}" নামে একটি নতুন Google Sheet তৈরি করে মোট ${pendingConfirm.rowCount}টি সারি (নাম, পিতার নাম, মোবাইল, ইমেইল ও পাসওয়ার্ড হ্যাশ) যুক্ত করতে চান?`
-                      : isEn
-                        ? `Update tab "${pendingConfirm.tabName}" in "${pendingConfirm.spreadsheetTitle}" with ${pendingConfirm.rowCount} record(s)? Existing values in that tab will be replaced with the latest complete table.`
-                        : `"${pendingConfirm.spreadsheetTitle}" ফাইলের "${pendingConfirm.tabName}" ট্যাবে মোট ${pendingConfirm.rowCount}টি রেকর্ড আপডেট করতে চান? ওই ট্যাবের পূর্বের তথ্যগুলো সর্বশেষ পূর্ণাঙ্গ তালিকা দিয়ে প্রতিস্থাপিত হবে।`}
-                  </p>
+                  <div className="space-y-2 text-sm text-[#334155]">
+                    {pendingConfirm.mode === 'create' ? (
+                      <p>
+                        {isEn
+                          ? `Create a new Google Sheet named "${pendingConfirm.title}" with two tabs: "${pendingConfirm.admissionTab}" (${pendingConfirm.admissionCount} online admissions) and "${pendingConfirm.studentTab}" (${pendingConfirm.studentCount} student registrations)?`
+                          : `"${pendingConfirm.title}" নামে একটি নতুন Google Sheet তৈরি করে "${pendingConfirm.admissionTab}" ট্যাবে ${pendingConfirm.admissionCount}টি ভর্তি আবেদন এবং "${pendingConfirm.studentTab}" ট্যাবে ${pendingConfirm.studentCount}টি ছাত্র রেজিস্ট্রেশন সংরক্ষণ করতে চান?`}
+                      </p>
+                    ) : pendingConfirm.syncMode === 'split' ? (
+                      <>
+                        <p>
+                          {isEn
+                            ? `Update "${pendingConfirm.spreadsheetTitle}" as follows:`
+                            : `"${pendingConfirm.spreadsheetTitle}" ফাইলে নিচের ট্যাবগুলোতে ডাটা সংরক্ষণ করতে চান?`}
+                        </p>
+                        <ul className="list-disc space-y-1 pl-5 text-xs text-[#0F172A]">
+                          <li>
+                            {isEn
+                              ? `Tab "${pendingConfirm.admissionTab}": ${pendingConfirm.admissionCount} Online Admission record(s)`
+                              : `"${pendingConfirm.admissionTab}" ট্যাবে: ${pendingConfirm.admissionCount}টি অনলাইন ভর্তি আবেদন`}
+                          </li>
+                          <li>
+                            {isEn
+                              ? `Tab "${pendingConfirm.studentTab}": ${pendingConfirm.studentCount} Student Registration record(s)${pendingConfirm.needsCreateStudentTab ? ' (new tab will be created automatically)' : ''}`
+                              : `"${pendingConfirm.studentTab}" ট্যাবে: ${pendingConfirm.studentCount}টি ছাত্র রেজিস্ট্রেশন${pendingConfirm.needsCreateStudentTab ? ' (এই নামে নতুন ট্যাব স্বয়ংক্রিয়ভাবে তৈরি হবে)' : ''}`}
+                          </li>
+                        </ul>
+                        <p className="text-xs text-[#475569]">
+                          {isEn
+                            ? 'Existing values in those tab(s) will be updated with the latest records.'
+                            : 'সংশ্লিষ্ট ট্যাবের পূর্বের তথ্যগুলো সর্বশেষ পূর্ণাঙ্গ তালিকা দিয়ে আপডেট হবে।'}
+                        </p>
+                      </>
+                    ) : pendingConfirm.syncMode === 'students_only' ? (
+                      <p>
+                        {isEn
+                          ? `Save ${pendingConfirm.studentCount} student registration record(s) into "${pendingConfirm.studentTab}" of "${pendingConfirm.spreadsheetTitle}"${pendingConfirm.needsCreateStudentTab ? ' (creating the tab automatically)' : ''}?`
+                          : `"${pendingConfirm.spreadsheetTitle}" ফাইলের "${pendingConfirm.studentTab}" ট্যাবে ${pendingConfirm.studentCount}টি ছাত্র রেজিস্ট্রেশনের তথ্য সংরক্ষণ করতে চান?${pendingConfirm.needsCreateStudentTab ? ` ("${pendingConfirm.studentTab}" ট্যাব না থাকায় নতুন করে তৈরি করা হবে)` : ''}`}
+                      </p>
+                    ) : (
+                      <p>
+                        {isEn
+                          ? `Update tab "${pendingConfirm.combinedTab}" in "${pendingConfirm.spreadsheetTitle}" with all ${pendingConfirm.totalCount} record(s)? Existing values in that tab will be replaced.`
+                          : `"${pendingConfirm.spreadsheetTitle}" ফাইলের "${pendingConfirm.combinedTab}" ট্যাবে মোট ${pendingConfirm.totalCount}টি রেকর্ড আপডেট করতে চান? ওই ট্যাবের পূর্বের তথ্যগুলো সর্বশেষ তালিকা দিয়ে প্রতিস্থাপিত হবে।`}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex flex-wrap items-center justify-end gap-2.5">
                     <button
                       type="button"
@@ -673,13 +921,13 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                   <div className="rounded-xl border border-[#E2E8F0] p-4">
                     <h3 className="text-sm font-bold text-[#0F172A]">
                       {isEn
-                        ? 'Option 1: Create a New Google Sheet'
-                        : 'বিকল্প ১: নতুন Google Sheet তৈরি করে সব ডাটা যুক্ত করুন'}
+                        ? 'Option 1: Create a New Google Sheet (with Sheet2 for Student Registrations)'
+                        : 'বিকল্প ১: নতুন Google Sheet তৈরি (ভর্তি আবেদন + ছাত্র রেজিস্ট্রেশন Sheet2-এ)'}
                     </h3>
                     <p className="mt-1 text-xs text-[#475569]">
                       {isEn
-                        ? 'Automatically creates a formatted Google Sheet in your Google account with all rows.'
-                        : 'স্বয়ংক্রিয়ভাবে আপনার Google অ্যাকাউন্টে হেডারসহ একটি নতুন শিট তৈরি করে সব সারি বসিয়ে দেবে।'}
+                        ? 'Creates a new spreadsheet with "OnlineAdmissions" tab for admissions and "Sheet2" for student registrations.'
+                        : 'স্বয়ংক্রিয়ভাবে একই ফাইলে "OnlineAdmissions" ট্যাবে ভর্তি আবেদন এবং "Sheet2" ট্যাবে ছাত্র রেজিস্ট্রেশনের তথ্য সংরক্ষণ করবে।'}
                     </p>
                     <button
                       type="button"
@@ -690,7 +938,7 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                       <PlusCircle className="h-4 w-4" aria-hidden="true" />
                       <span>
                         {isEn
-                          ? 'Create New Sheet & Sync All Data'
+                          ? 'Create New Sheet & Sync Both Tabs'
                           : 'নতুন Google Sheet তৈরি ও সিঙ্ক করুন'}
                       </span>
                     </button>
@@ -700,13 +948,13 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                   <div className="rounded-xl border border-[#E2E8F0] p-4">
                     <h3 className="text-sm font-bold text-[#0F172A]">
                       {isEn
-                        ? 'Option 2: Update an Existing Google Sheet'
-                        : 'বিকল্প ২: আপনার বিদ্যমান Google Sheet-এ যুক্ত করুন'}
+                        ? 'Option 2: Link & Update an Existing Google Sheet'
+                        : 'বিকল্প ২: আপনার বিদ্যমান Google Sheet লিংক ও আপডেট করুন'}
                     </h3>
                     <p className="mt-1 text-xs text-[#475569]">
                       {isEn
-                        ? 'Paste your Google Sheet link or Spreadsheet ID, load its tabs, and choose which tab to update.'
-                        : 'আপনার Google Sheet-এর লিংক বা ID এখানে পেস্ট করে ট্যাব নির্বাচন করুন।'}
+                        ? 'Paste your Google Sheet link or ID, load tabs, and save student registrations into Sheet2 of the same file.'
+                        : 'আপনার Google Sheet-এর লিংক বা ID পেস্ট করে ট্যাব লোড করুন এবং একই ফাইলের Sheet2-এ ছাত্র রেজিস্ট্রেশন সেভ করুন।'}
                     </p>
 
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -731,31 +979,225 @@ export function GoogleSheetsSyncModal({ isOpen, lang, onClose }: GoogleSheetsSyn
                     </div>
 
                     {availableTabs.length > 0 && (
-                      <div className="mt-3 space-y-2.5 rounded-lg bg-[#F8FAFC] p-3">
+                      <div className="mt-3 space-y-3 rounded-lg bg-[#F8FAFC] p-3.5">
                         <p className="text-xs font-medium text-[#334155]">
                           {isEn ? 'Spreadsheet:' : 'ফাইল:'}{' '}
                           <span className="font-bold text-[#0F172A]">{spreadsheetTitle}</span>
                         </p>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-semibold text-[#334155]">
+                            {isEn ? 'Sync Mode' : 'সংরক্ষণের ধরন'}
+                          </label>
                           <select
-                            value={selectedTab}
-                            onChange={(e) => setSelectedTab(e.target.value)}
-                            className="flex-1 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                            value={syncMode}
+                            onChange={(e) => setSyncMode(e.target.value as ExistingSyncMode)}
+                            className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#0F172A] focus:border-[#065F46] focus:outline-none"
                           >
-                            {availableTabs.map((tab) => (
-                              <option key={tab} value={tab}>
-                                {tab}
-                              </option>
-                            ))}
+                            <option value="split">
+                              {isEn
+                                ? 'Separate Tabs: Admissions → Tab 1 & Student Registrations → Sheet2'
+                                : 'আলাদা ট্যাব: ভর্তি আবেদন → ১ম শিট ও ছাত্র রেজিস্ট্রেশন → Sheet2'}
+                            </option>
+                            <option value="students_only">
+                              {isEn
+                                ? 'Student Registrations Only → Sheet2'
+                                : 'শুধুমাত্র ছাত্র রেজিস্ট্রেশন → Sheet2'}
+                            </option>
+                            <option value="combined">
+                              {isEn
+                                ? 'All Records Together → Single Tab'
+                                : 'সকল তথ্য একসাথে একটি ট্যাবে'}
+                            </option>
                           </select>
+                        </div>
+
+                        {syncMode === 'split' && (
+                          <div className="grid gap-2.5 sm:grid-cols-2">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-semibold text-[#334155]">
+                                {isEn
+                                  ? `Online Admissions (${admissionRecords.length})`
+                                  : `ভর্তি আবেদন ট্যাব (${admissionRecords.length}টি)`}
+                              </label>
+                              <select
+                                value={admissionTab}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  setAdmissionTab(next);
+                                  const sid = extractSpreadsheetId(sheetInput);
+                                  if (sid) {
+                                    saveSheetsConfig({
+                                      spreadsheetId: sid,
+                                      spreadsheetTitle: spreadsheetTitle || sid,
+                                      admissionTab: next,
+                                      studentTab,
+                                    });
+                                  }
+                                }}
+                                className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                              >
+                                {availableTabs.map((tab) => (
+                                  <option key={tab} value={tab}>
+                                    {tab}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-semibold text-[#065F46]">
+                                {isEn
+                                  ? `Student Registrations (${studentRegistrationRecords.length})`
+                                  : `ছাত্র রেজিস্ট্রেশন ট্যাব (${studentRegistrationRecords.length}টি)`}
+                              </label>
+                              <select
+                                value={studentTab}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  setStudentTab(next);
+                                  const sid = extractSpreadsheetId(sheetInput);
+                                  if (sid) {
+                                    saveSheetsConfig({
+                                      spreadsheetId: sid,
+                                      spreadsheetTitle: spreadsheetTitle || sid,
+                                      admissionTab,
+                                      studentTab: next,
+                                    });
+                                  }
+                                }}
+                                className="w-full rounded-lg border border-[#065F46]/40 bg-white px-3 py-2 text-xs font-medium text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                              >
+                                {studentTabOptions.map((tab) => (
+                                  <option key={tab} value={tab}>
+                                    {tab}
+                                    {!availableTabs.includes(tab)
+                                      ? isEn
+                                        ? ' (Will be created)'
+                                        : ' (নতুন তৈরি হবে)'
+                                      : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        {syncMode === 'students_only' && (
+                          <div>
+                            <label className="mb-1 block text-[11px] font-semibold text-[#065F46]">
+                              {isEn
+                                ? `Target Tab for Student Registrations (${studentRegistrationRecords.length})`
+                                : `ছাত্র রেজিস্ট্রেশনের জন্য ট্যাব (${studentRegistrationRecords.length}টি)`}
+                            </label>
+                            <select
+                              value={studentTab}
+                              onChange={(e) => setStudentTab(e.target.value)}
+                              className="w-full rounded-lg border border-[#065F46]/40 bg-white px-3 py-2 text-xs font-medium text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                            >
+                              {studentTabOptions.map((tab) => (
+                                <option key={tab} value={tab}>
+                                  {tab}
+                                  {!availableTabs.includes(tab)
+                                    ? isEn
+                                      ? ' (Will be created)'
+                                      : ' (নতুন তৈরি হবে)'
+                                    : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {syncMode === 'combined' && (
+                          <div>
+                            <label className="mb-1 block text-[11px] font-semibold text-[#334155]">
+                              {isEn
+                                ? `Target Tab (All ${records.length} Records)`
+                                : `সব তথ্যের ট্যাব (মোট ${records.length}টি)`}
+                            </label>
+                            <select
+                              value={combinedTab}
+                              onChange={(e) => setCombinedTab(e.target.value)}
+                              className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#0F172A] focus:border-[#065F46] focus:outline-none"
+                            >
+                              {availableTabs.map((tab) => (
+                                <option key={tab} value={tab}>
+                                  {tab}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={loadingRecords}
+                          onClick={handleRequestUpdateSheet}
+                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#065F46] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#047857] disabled:opacity-50"
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>
+                            {syncMode === 'split'
+                              ? isEn
+                                ? `Sync Admissions & Student Registrations (${studentTab})`
+                                : `ভর্তি আবেদন ও ছাত্র রেজিস্ট্রেশন (${studentTab}) সিঙ্ক করুন`
+                              : syncMode === 'students_only'
+                                ? isEn
+                                  ? `Save Student Registrations to ${studentTab}`
+                                  : `${studentTab}-এ ছাত্র রেজিস্ট্রেশন সেভ করুন`
+                                : isEn
+                                  ? `Sync All Data to ${combinedTab}`
+                                  : `${combinedTab} ট্যাবে সব ডাটা যুক্ত করুন`}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Optional 24/7 Server Webhook Guide (Google Apps Script) */}
+                  <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
+                    <button
+                      type="button"
+                      onClick={() => setShowWebhookGuide((prev) => !prev)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-xs font-semibold text-[#0F172A]"
+                    >
+                      <span>
+                        {isEn
+                          ? 'Optional: 24/7 Background Auto-Save from Any Device (Apps Script)'
+                          : 'ঐচ্ছিক: যেকোনো ভিজিটরের ফর্ম পূরণে ২৪ ঘণ্টা অটো-সেভ (Apps Script গাইড)'}
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 text-[#475569] transition-transform ${showWebhookGuide ? 'rotate-180' : ''}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {showWebhookGuide && (
+                      <div className="space-y-3 border-t border-[#E2E8F0] px-4 py-3 text-xs text-[#334155]">
+                        <p>
+                          {isEn
+                            ? 'If students fill out forms from their own phones without your Google login, deploy this short script inside your Google Sheet (Extensions → Apps Script → Deploy as Web App, Who has access: Anyone) and set GOOGLE_SHEETS_WEBHOOK_URL in AI Studio Secrets:'
+                            : 'ছাত্ররা নিজেদের মোবাইল থেকে ফর্ম পূরণ করলেও যেন লগইন ছাড়াই সরাসরি শিটে সেভ হয়, সেজন্য আপনার Google Sheet-এ (Extensions → Apps Script → Deploy as Web App, Access: Anyone) নিচের কোডটি দিয়ে Web App URL-টি AI Studio Secrets-এ GOOGLE_SHEETS_WEBHOOK_URL হিসেবে যুক্ত করুন:'}
+                        </p>
+                        <div className="relative">
+                          <pre className="max-h-44 overflow-auto rounded-lg border border-slate-200 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-slate-100">
+                            {APPS_SCRIPT_CODE}
+                          </pre>
                           <button
                             type="button"
-                            disabled={!selectedTab || loadingRecords}
-                            onClick={handleRequestUpdateSheet}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#065F46] px-4 py-2 text-xs font-semibold text-white hover:bg-[#047857] disabled:opacity-50"
+                            onClick={handleCopyScript}
+                            className="absolute top-2 right-2 inline-flex items-center gap-1 rounded bg-white/10 px-2 py-1 text-[10px] font-medium text-white hover:bg-white/20"
                           >
-                            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>{isEn ? 'Sync to Selected Tab' : 'এই ট্যাবে যুক্ত করুন'}</span>
+                            {copiedScript ? (
+                              <>
+                                <Check className="h-3 w-3" aria-hidden="true" />
+                                <span>{isEn ? 'Copied' : 'কপি হয়েছে'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" aria-hidden="true" />
+                                <span>{isEn ? 'Copy' : 'কপি করুন'}</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>

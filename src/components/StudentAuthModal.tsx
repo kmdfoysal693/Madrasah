@@ -6,11 +6,17 @@ import { isValidBdMobile, normalizeMobileNumber } from '../data/madrasaData';
 import { UI_COPY, type Language } from '../data/madrasaTranslations';
 import { auth, googleAuthProvider, setInMemoryFirebaseToken } from '../lib/firebase';
 
+export interface StudentAuthSuccessMeta {
+  action: 'login' | 'register' | 'google_signin';
+  isNewStudent?: boolean;
+  sheetsAutoSaved?: boolean;
+}
+
 interface StudentAuthModalProps {
   isOpen: boolean;
   lang: Language;
   onClose: () => void;
-  onAuthSuccess: (token: string, student: StudentUser) => void;
+  onAuthSuccess: (token: string, student: StudentUser, meta?: StudentAuthSuccessMeta) => void;
 }
 
 type AuthTab = 'login' | 'register';
@@ -94,13 +100,19 @@ export function StudentAuthModal({
       const data = await safeReadJson<{
         token?: string;
         student?: StudentUser;
+        isNewStudent?: boolean;
+        sheetsAutoSaved?: boolean;
         error?: string;
       }>(response);
       if (!response.ok || !data?.token || !data?.student) {
         setErrorMsg(data?.error ?? a.errGoogleFailed);
         return;
       }
-      onAuthSuccess(data.token, data.student);
+      onAuthSuccess(data.token, data.student, {
+        action: 'google_signin',
+        isNewStudent: Boolean(data.isNewStudent),
+        sheetsAutoSaved: Boolean(data.sheetsAutoSaved),
+      });
     } catch (error) {
       const code = (error as { code?: string })?.code ?? '';
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
@@ -143,7 +155,7 @@ export function StudentAuthModal({
         setErrorMsg(data?.error ?? a.errLoginFailed);
         return;
       }
-      onAuthSuccess(data.token, data.student);
+      onAuthSuccess(data.token, data.student, { action: 'login' });
       setLoginPassword('');
     } catch {
       setErrorMsg(a.errNetwork);
@@ -201,13 +213,18 @@ export function StudentAuthModal({
       const data = await safeReadJson<{
         token?: string;
         student?: StudentUser;
+        sheetsAutoSaved?: boolean;
         error?: string;
       }>(response);
       if (!response.ok || !data?.token || !data?.student) {
         setErrorMsg(data?.error ?? a.errRegFailed);
         return;
       }
-      onAuthSuccess(data.token, data.student);
+      onAuthSuccess(data.token, data.student, {
+        action: 'register',
+        isNewStudent: true,
+        sheetsAutoSaved: Boolean(data.sheetsAutoSaved),
+      });
       setRegPassword('');
       setRegConfirmPassword('');
     } catch {

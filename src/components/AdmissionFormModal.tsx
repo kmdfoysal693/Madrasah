@@ -24,7 +24,7 @@ interface AdmissionFormModalProps {
   bnDepartments?: Department[];
   lang: Language;
   onClose: () => void;
-  onSubmitted: (submission: AdmissionSubmission) => void;
+  onSubmitted: (submission: AdmissionSubmission, sheetsAutoSaved?: boolean) => void;
 }
 
 interface ModalFormErrors {
@@ -179,9 +179,19 @@ export function AdmissionFormModal({
         body: JSON.stringify(submission),
       });
       const rawText = await response.text();
-      let data: { admission?: AdmissionSubmission; error?: string } | null = null;
+      let data: {
+        admission?: AdmissionSubmission;
+        sheetsAutoSaved?: boolean;
+        error?: string;
+      } | null = null;
       try {
-        data = rawText ? (JSON.parse(rawText) as { admission?: AdmissionSubmission; error?: string }) : null;
+        data = rawText
+          ? (JSON.parse(rawText) as {
+              admission?: AdmissionSubmission;
+              sheetsAutoSaved?: boolean;
+              error?: string;
+            })
+          : null;
       } catch {
         data = null;
       }
@@ -207,7 +217,7 @@ export function AdmissionFormModal({
       setMobile('');
       setEmail('');
       setAddress('');
-      onSubmitted(submission);
+      onSubmitted(submission, Boolean(data?.sheetsAutoSaved));
     } catch {
       setSubmitError(
         lang === 'en'

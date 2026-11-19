@@ -1,7 +1,7 @@
 import { desc, eq, or } from 'drizzle-orm';
 import { db, isSqlConfigured } from './index.ts';
 import { admissions, cmsState, madrasaRecords, students } from './schema.ts';
-import { getSupabaseAdmin, isSupabaseConfigured } from './supabase.ts';
+import { getSupabaseAdmin, isSupabaseConfigured, markSupabaseUnavailable } from './supabase.ts';
 import type { AdmissionStatus, StoredAdmissionRecord } from '../data/cmsTypes.ts';
 import type {
   ExamResultTerm,
@@ -10,7 +10,7 @@ import type {
 } from '../data/studentPortalData.ts';
 
 async function runWithDbFallback<T>(
-  opName: string,
+  _opName: string,
   supabaseOp: () => Promise<T>,
   drizzleOp: () => Promise<T>,
 ): Promise<T> {
@@ -19,7 +19,7 @@ async function runWithDbFallback<T>(
       return await supabaseOp();
     } catch (supabaseErr) {
       if (isSqlConfigured()) {
-        console.warn(`Supabase ${opName} failed; falling back to Cloud SQL:`, supabaseErr);
+        markSupabaseUnavailable();
         return await drizzleOp();
       }
       throw supabaseErr;

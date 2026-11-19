@@ -58,15 +58,20 @@ import {
 } from './data/madrasaTranslations';
 import type { StudentUser } from './data/studentPortalData';
 import { signOut } from 'firebase/auth';
-import { auth, setInMemoryFirebaseToken } from './lib/firebase';
+import { auth, getSheetsAccessToken, setInMemoryFirebaseToken } from './lib/firebase';
+import { getSavedSheetsConfig } from './lib/googleSheetsSync';
 import { NoticeModal } from './components/NoticeModal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { GalleryLightboxModal } from './components/GalleryModals';
 import { TeacherProfileModal } from './components/TeacherProfileModal';
-import { StudentAuthModal } from './components/StudentAuthModal';
+import { StudentAuthModal, type StudentAuthSuccessMeta } from './components/StudentAuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdmissionFormModal } from './components/AdmissionFormModal';
 import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
+import {
+  DirectSheetSaveDialog,
+  type PendingDirectSheetEntry,
+} from './components/DirectSheetSaveDialog';
 import { LanguageToggle } from './components/LanguageToggle';
 
 type NoticeFilter = 'সকল' | NoticeCategory;
@@ -180,7 +185,11 @@ export default function App() {
     };
   }, [studentToken]);
 
-  const handleStudentAuthSuccess = (token: string, student: StudentUser) => {
+  const handleStudentAuthSuccess = (
+    token: string,
+    student: StudentUser,
+    meta?: StudentAuthSuccessMeta,
+  ) => {
     try {
       localStorage.setItem('madrasa_student_token', token);
     } catch {
@@ -191,6 +200,20 @@ export default function App() {
     setCurrentStudent(student);
     setAuthModalOpen(false);
     setShowDashboard(true);
+
+    const isRegistration =
+      meta?.action === 'register' || (meta?.action === 'google_signin' && meta?.isNewStudent);
+    if (
+      isRegistration &&
+      !meta?.sheetsAutoSaved &&
+      (getSavedSheetsConfig()?.spreadsheetId || getSheetsAccessToken())
+    ) {
+      setPendingSheetEntry({
+        kind: 'student',
+        student,
+        accountType: meta?.action === 'google_signin' ? 'google_signin' : 'register',
+      });
+    }
   };
 
   const handleStudentLogout = useCallback(() => {
@@ -222,6 +245,11 @@ export default function App() {
   const [submittingInline, setSubmittingInline] = useState(false);
   const [latestSubmission, setLatestSubmission] = useState<AdmissionSubmission | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [receiptSheetSavedInfo, setReceiptSheetSavedInfo] = useState<{
+    tabName: string;
+    sheetUrl?: string;
+  } | null>(null);
+  const [pendingSheetEntry, setPendingSheetEntry] = useState<PendingDirectSheetEntry | null>(null);
 
   const selectedInlineDept = useMemo(
     () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
@@ -240,7 +268,8 @@ export default function App() {
     Boolean(selectedTeacherId) ||
     authModalOpen ||
     admissionModalOpen ||
-    sheetsModalOpen;
+    sheetsModalOpen ||
+    Boolean(pendingSheetEntry);
 
   useEffect(() => {
     if (!isAnyModalOpen) return;
@@ -372,6 +401,8 @@ export default function App() {
     };
 
     setSubmittingInline(true);
+    setReceiptSheetSavedInfo(null);
+    let sheetsAutoSaved = false;
     try {
       const response = await fetch('/api/admissions', {
         method: 'POST',
@@ -379,10 +410,14 @@ export default function App() {
         body: JSON.stringify(submission),
       });
       if (response.ok) {
-        const data = (await response.json()) as { admission?: AdmissionSubmission };
+        const data = (await response.json()) as {
+          admission?: AdmissionSubmission;
+          sheetsAutoSaved?: boolean;
+        };
         if (data.admission?.trackingId) {
           submission.trackingId = data.admission.trackingId;
         }
+        sheetsAutoSaved = Boolean(data.sheetsAutoSaved);
       }
     } catch {
       // Keep client receipt resilient if network is temporarily unreachable
@@ -392,10 +427,19 @@ export default function App() {
 
     setLatestSubmission(submission);
     setReceiptModalOpen(true);
+
+    if (sheetsAutoSaved) {
+      setReceiptSheetSavedInfo({
+        tabName: lang === 'en' ? 'Admissions' : 'ভর্তি আবেদন',
+      });
+    } else if (getSavedSheetsConfig()?.spreadsheetId || getSheetsAccessToken()) {
+      setPendingSheetEntry({ kind: 'admission', submission });
+    }
   };
 
   const handleResetForNewApplication = () => {
     setReceiptModalOpen(false);
+    setReceiptSheetSavedInfo(null);
     setStudentName('');
     setFatherName('');
     setDateOfBirth('');
@@ -410,13 +454,20 @@ export default function App() {
 
   if (showDashboard && studentToken) {
     return (
-      <StudentDashboard
-        token={studentToken}
-        lang={lang}
-        onChangeLang={setLang}
-        onBackToSite={() => setShowDashboard(false)}
-        onLogout={handleStudentLogout}
-      />
+      <>
+        <StudentDashboard
+          token={studentToken}
+          lang={lang}
+          onChangeLang={setLang}
+          onBackToSite={() => setShowDashboard(false)}
+          onLogout={handleStudentLogout}
+        />
+        <DirectSheetSaveDialog
+          entry={pendingSheetEntry}
+          lang={lang}
+          onClose={() => setPendingSheetEntry(null)}
+        />
+      </>
     );
   }
 
@@ -1820,6 +1871,12 @@ export default function App() {
       <ReceiptModal
         submission={receiptModalOpen ? latestSubmission : null}
         lang={lang}
+        sheetsSavedInfo={receiptSheetSavedInfo}
+        onRequestSaveToSheets={
+          latestSubmission
+            ? () => setPendingSheetEntry({ kind: 'admission', submission: latestSubmission })
+            : undefined
+        }
         onClose={() => setReceiptModalOpen(false)}
         onNewApplication={handleResetForNewApplication}
       />
@@ -1850,10 +1907,20 @@ export default function App() {
         initialDepartmentId={admissionInitialDeptId}
         lang={lang}
         onClose={() => setAdmissionModalOpen(false)}
-        onSubmitted={(submission) => {
+        onSubmitted={(submission, sheetsAutoSaved) => {
           setLatestSubmission(submission);
           setAdmissionModalOpen(false);
           setReceiptModalOpen(true);
+          if (sheetsAutoSaved) {
+            setReceiptSheetSavedInfo({
+              tabName: lang === 'en' ? 'Admissions' : 'ভর্তি আবেদন',
+            });
+          } else {
+            setReceiptSheetSavedInfo(null);
+            if (getSavedSheetsConfig()?.spreadsheetId || getSheetsAccessToken()) {
+              setPendingSheetEntry({ kind: 'admission', submission });
+            }
+          }
         }}
       />
 
@@ -1861,6 +1928,17 @@ export default function App() {
         isOpen={sheetsModalOpen}
         lang={lang}
         onClose={() => setSheetsModalOpen(false)}
+      />
+
+      <DirectSheetSaveDialog
+        entry={pendingSheetEntry}
+        lang={lang}
+        onClose={() => setPendingSheetEntry(null)}
+        onSaved={(info) => {
+          if (pendingSheetEntry?.kind === 'admission') {
+            setReceiptSheetSavedInfo(info);
+          }
+        }}
       />
     </div>
   );

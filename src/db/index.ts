@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema.ts';
@@ -7,12 +9,22 @@ declare global {
 }
 
 export function isSqlConfigured(): boolean {
-  return Boolean(
-    process.env.SQL_HOST &&
-      process.env.SQL_USER &&
-      process.env.SQL_PASSWORD &&
-      process.env.SQL_DB_NAME,
-  );
+  const host = (process.env.SQL_HOST || '').trim();
+  if (
+    !host ||
+    !process.env.SQL_USER ||
+    !process.env.SQL_PASSWORD ||
+    !process.env.SQL_DB_NAME
+  ) {
+    return false;
+  }
+
+  // When running with a Cloud SQL Unix socket path, verify the socket actually exists.
+  if (host.startsWith('/')) {
+    return fs.existsSync(path.join(host, '.s.PGSQL.5432'));
+  }
+
+  return true;
 }
 
 export const createPool = (): Pool => {

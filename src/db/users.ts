@@ -1,6 +1,6 @@
 import { db, isSqlConfigured } from './index.ts';
 import { users } from './schema.ts';
-import { getSupabaseAdmin, isSupabaseConfigured } from './supabase.ts';
+import { getSupabaseAdmin, isSupabaseConfigured, markSupabaseUnavailable } from './supabase.ts';
 
 export async function getOrCreateUser(uid: string, email: string, displayName = '') {
   const drizzleFallback = async () => {
@@ -58,7 +58,7 @@ export async function getOrCreateUser(uid: string, email: string, displayName = 
         };
       } catch (supabaseErr) {
         if (isSqlConfigured()) {
-          console.warn('Supabase getOrCreateUser failed; falling back to Cloud SQL:', supabaseErr);
+          markSupabaseUnavailable();
           return await drizzleFallback();
         }
         throw supabaseErr;
@@ -96,7 +96,7 @@ export async function getUsers() {
         }));
       } catch (supabaseErr) {
         if (isSqlConfigured()) {
-          console.warn('Supabase getUsers failed; falling back to Cloud SQL:', supabaseErr);
+          markSupabaseUnavailable();
           return await db.select().from(users);
         }
         throw supabaseErr;

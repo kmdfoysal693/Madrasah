@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { CheckCircle2, Printer, RotateCcw, X } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, Printer, RotateCcw, X } from 'lucide-react';
 import { DEPARTMENTS, type AdmissionSubmission, type Department } from '../data/madrasaData';
 import {
   DEPARTMENTS_EN,
@@ -14,6 +14,8 @@ interface ReceiptModalProps {
   departments?: Department[];
   brandFull?: string;
   lang: Language;
+  sheetsSavedInfo?: { tabName: string; sheetUrl?: string } | null;
+  onRequestSaveToSheets?: () => void;
   onClose: () => void;
   onNewApplication: () => void;
 }
@@ -23,6 +25,8 @@ export function ReceiptModal({
   departments,
   brandFull,
   lang,
+  sheetsSavedInfo,
+  onRequestSaveToSheets,
   onClose,
   onNewApplication,
 }: ReceiptModalProps) {
@@ -175,6 +179,28 @@ export function ReceiptModal({
           <p className="mt-1">{copy.receiptNextStepsBody}</p>
         </div>
 
+        {sheetsSavedInfo && (
+          <div className="no-print mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-900">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-[#065F46]">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {lang === 'en'
+                ? `Saved directly to Google Sheet (${sheetsSavedInfo.tabName})`
+                : `সরাসরি Google Sheet-এ সেভ হয়েছে (${sheetsSavedInfo.tabName})`}
+            </span>
+            {sheetsSavedInfo.sheetUrl && (
+              <a
+                href={sheetsSavedInfo.sheetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-[#065F46] underline underline-offset-4 hover:text-[#047857]"
+              >
+                <span>{lang === 'en' ? 'Open Sheet' : 'শিট খুলুন'}</span>
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            )}
+          </div>
+        )}
+
         <div className="no-print mt-6 flex flex-wrap items-center justify-between gap-3 pt-2">
           <button
             type="button"
@@ -185,7 +211,17 @@ export function ReceiptModal({
             <span>{copy.receiptNewAppBtn}</span>
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {!sheetsSavedInfo && onRequestSaveToSheets && (
+              <button
+                type="button"
+                onClick={onRequestSaveToSheets}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#065F46] bg-white px-4 py-2.5 text-sm font-medium text-[#065F46] transition-colors hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#065F46] whitespace-nowrap shrink-0"
+              >
+                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+                <span>{lang === 'en' ? 'Save to Google Sheet' : 'Google Sheet-এ সেভ করুন'}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => window.print()}
