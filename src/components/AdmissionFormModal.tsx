@@ -67,6 +67,7 @@ export function AdmissionFormModal({
   const [address, setAddress] = useState('');
   const [errors, setErrors] = useState<ModalFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const selectedDept = useMemo(
     () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
@@ -76,6 +77,7 @@ export function AdmissionFormModal({
   useEffect(() => {
     if (!isOpen) return;
     setErrors({});
+    setSubmitError('');
     setDepartmentId(initialDepartmentId || activeDepartments[0]?.id || DEPARTMENTS[0].id);
     setClassIndex(0);
   }, [activeDepartments, initialDepartmentId, isOpen]);
@@ -169,32 +171,52 @@ export function AdmissionFormModal({
     };
 
     setSubmitting(true);
+    setSubmitError('');
     try {
       const response = await fetch('/api/admissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submission),
       });
-      if (response.ok) {
-        const data = (await response.json()) as { admission?: AdmissionSubmission };
-        if (data.admission?.trackingId) {
-          submission.trackingId = data.admission.trackingId;
-        }
+      const rawText = await response.text();
+      let data: { admission?: AdmissionSubmission; error?: string } | null = null;
+      try {
+        data = rawText ? (JSON.parse(rawText) as { admission?: AdmissionSubmission; error?: string }) : null;
+      } catch {
+        data = null;
       }
+
+      if (!response.ok) {
+        setSubmitError(
+          data?.error ||
+            (lang === 'en'
+              ? 'Could not save admission application. Please try again.'
+              : 'ভর্তি আবেদন সংরক্ষণ করা যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।'),
+        );
+        return;
+      }
+
+      if (data?.admission?.trackingId) {
+        submission.trackingId = data.admission.trackingId;
+      }
+
+      setErrors({});
+      setStudentName('');
+      setFatherName('');
+      setResidentialKey('boarding');
+      setMobile('');
+      setEmail('');
+      setAddress('');
+      onSubmitted(submission);
     } catch {
-      // Keep client flow resilient if offline
+      setSubmitError(
+        lang === 'en'
+          ? 'Could not connect to server. Please try again.'
+          : 'সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
+      );
     } finally {
       setSubmitting(false);
     }
-
-    setErrors({});
-    setStudentName('');
-    setFatherName('');
-    setResidentialKey('boarding');
-    setMobile('');
-    setEmail('');
-    setAddress('');
-    onSubmitted(submission);
   };
 
   return (
@@ -450,6 +472,15 @@ export function AdmissionFormModal({
               <p className="mt-1 text-xs font-medium text-red-600">{errors.address}</p>
             )}
           </div>
+
+          {submitError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-700"
+            >
+              {submitError}
+            </div>
+          )}
 
           {/* Submit Button */}
           <div className="pt-2">

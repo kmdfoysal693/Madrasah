@@ -29,8 +29,10 @@ import {
   insertAdmissionDb,
   insertStudentDb,
   listStudentsDb,
+  listUnifiedMadrasaRecords,
   recordStudentLoginDb,
   updateStudentTuitionDb,
+  type UnifiedMadrasaRecord,
 } from './src/db/madrasaDb.ts';
 
 interface StoredStudentRecord {
@@ -750,7 +752,7 @@ export function createExpressApp() {
     }
   });
 
-  // 2c. Authenticated Firebase Users Endpoint (Cloud SQL users table)
+  // 2c. Authenticated Firebase Users Endpoint (Cloud SQL / Supabase users table)
   app.get('/api/users', requireAuth, async (_req: AuthRequest, res: Response) => {
     try {
       if (!isDatabaseConfigured()) {
@@ -762,6 +764,65 @@ export function createExpressApp() {
     } catch (error) {
       console.error('Error in GET /api/users:', error);
       res.status(500).json({ error: 'Failed to retrieve user records.' });
+    }
+  });
+
+  // 2d. Authenticated Unified Records Export (for Google Sheets Sync)
+  app.get('/api/records/export', requireAuth, async (_req: AuthRequest, res: Response) => {
+    try {
+      if (isDatabaseConfigured()) {
+        const records = await listUnifiedMadrasaRecords();
+        res.json({ records });
+        return;
+      }
+
+      const admDb = readAdmissionsDatabase();
+      const stuDb = readDatabase();
+      let seq = 1;
+      const admRows: UnifiedMadrasaRecord[] = admDb.admissions.map((a) => ({
+        id: seq++,
+        recordType: 'online_admission',
+        referenceCode: a.trackingId,
+        name: a.studentName,
+        fatherName: a.fatherName,
+        mobile: a.mobile,
+        email: a.email ?? '',
+        passwordHash: '',
+        dateOfBirth: a.dateOfBirth,
+        department: a.department,
+        className: a.className,
+        residentialType: a.residentialType,
+        address: a.address,
+        status: a.status,
+        firebaseUid: '',
+        lastLoginAt: null,
+        createdAt: a.submittedAtIso,
+        updatedAt: a.submittedAtIso,
+      }));
+      const stuRows: UnifiedMadrasaRecord[] = stuDb.students.map((s) => ({
+        id: seq++,
+        recordType: s.firebaseUid ? 'google_signin' : 'student_account',
+        referenceCode: s.studentRoll,
+        name: s.name,
+        fatherName: s.fatherName ?? '',
+        mobile: s.phone,
+        email: s.email,
+        passwordHash: s.passwordHash ? `${s.passwordSalt}:${s.passwordHash}` : '',
+        dateOfBirth: '',
+        department: s.department,
+        className: s.className,
+        residentialType: '',
+        address: '',
+        status: 'active',
+        firebaseUid: s.firebaseUid ?? '',
+        lastLoginAt: s.lastLoginAt ?? null,
+        createdAt: s.createdAt,
+        updatedAt: s.lastLoginAt ?? s.createdAt,
+      }));
+      res.json({ records: [...admRows, ...stuRows] });
+    } catch (error) {
+      console.error('Error in GET /api/records/export:', error);
+      res.status(500).json({ error: 'ডাটাবেজের তথ্য সংগ্রহ করা যায়নি।' });
     }
   });
 

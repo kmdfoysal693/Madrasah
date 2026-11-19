@@ -66,6 +66,7 @@ import { TeacherProfileModal } from './components/TeacherProfileModal';
 import { StudentAuthModal } from './components/StudentAuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdmissionFormModal } from './components/AdmissionFormModal';
+import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
 import { LanguageToggle } from './components/LanguageToggle';
 
 type NoticeFilter = 'সকল' | NoticeCategory;
@@ -131,6 +132,7 @@ export default function App() {
   });
   const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [sheetsModalOpen, setSheetsModalOpen] = useState(false);
   const skipNextMeFetchRef = useRef(false);
 
   const selectedNotice = useMemo(
@@ -237,7 +239,8 @@ export default function App() {
     lightboxIndex !== null ||
     Boolean(selectedTeacherId) ||
     authModalOpen ||
-    admissionModalOpen;
+    admissionModalOpen ||
+    sheetsModalOpen;
 
   useEffect(() => {
     if (!isAnyModalOpen) return;
@@ -1790,7 +1793,19 @@ export default function App() {
 
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569] sm:flex-row">
             <p>{copy.footerCopyright}</p>
-            <p>{copy.footerMotto}</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <p>{copy.footerMotto}</p>
+              <span aria-hidden="true" className="text-slate-300">
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={() => setSheetsModalOpen(true)}
+                className="font-medium text-[#065F46] underline-offset-4 hover:underline"
+              >
+                {lang === 'en' ? 'Sync to Google Sheets' : 'Google Sheet-এ ডাটা যুক্ত করুন'}
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -1840,6 +1855,12 @@ export default function App() {
           setAdmissionModalOpen(false);
           setReceiptModalOpen(true);
         }}
+      />
+
+      <GoogleSheetsSyncModal
+        isOpen={sheetsModalOpen}
+        lang={lang}
+        onClose={() => setSheetsModalOpen(false)}
       />
     </div>
   );
