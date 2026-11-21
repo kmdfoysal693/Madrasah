@@ -9,7 +9,6 @@ import { auth, googleAuthProvider, setInMemoryFirebaseToken } from '../lib/fireb
 export interface StudentAuthSuccessMeta {
   action: 'login' | 'register' | 'google_signin';
   isNewStudent?: boolean;
-  sheetsAutoSaved?: boolean;
 }
 
 interface StudentAuthModalProps {
@@ -101,7 +100,6 @@ export function StudentAuthModal({
         token?: string;
         student?: StudentUser;
         isNewStudent?: boolean;
-        sheetsAutoSaved?: boolean;
         error?: string;
       }>(response);
       if (!response.ok || !data?.token || !data?.student) {
@@ -111,7 +109,6 @@ export function StudentAuthModal({
       onAuthSuccess(data.token, data.student, {
         action: 'google_signin',
         isNewStudent: Boolean(data.isNewStudent),
-        sheetsAutoSaved: Boolean(data.sheetsAutoSaved),
       });
     } catch (error) {
       const code = (error as { code?: string })?.code ?? '';
@@ -213,7 +210,6 @@ export function StudentAuthModal({
       const data = await safeReadJson<{
         token?: string;
         student?: StudentUser;
-        sheetsAutoSaved?: boolean;
         error?: string;
       }>(response);
       if (!response.ok || !data?.token || !data?.student) {
@@ -223,7 +219,6 @@ export function StudentAuthModal({
       onAuthSuccess(data.token, data.student, {
         action: 'register',
         isNewStudent: true,
-        sheetsAutoSaved: Boolean(data.sheetsAutoSaved),
       });
       setRegPassword('');
       setRegConfirmPassword('');

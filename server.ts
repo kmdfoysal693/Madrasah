@@ -29,10 +29,8 @@ import {
   insertAdmissionDb,
   insertStudentDb,
   listStudentsDb,
-  listUnifiedMadrasaRecords,
   recordStudentLoginDb,
   updateStudentTuitionDb,
-  type UnifiedMadrasaRecord,
 } from './src/db/madrasaDb.ts';
 
 interface StoredStudentRecord {
@@ -249,60 +247,6 @@ function sanitizeStudent(record: {
     session: record.session,
   };
 }
-
-async function pushToGoogleSheetsWebhook(payload: {
-  targetSheet: 'admissions' | 'Sheet2';
-  headers: string[];
-  row: string[];
-}): Promise<boolean> {
-  const webhookUrl = (process.env.GOOGLE_SHEETS_WEBHOOK_URL ?? '').trim();
-  if (!webhookUrl || !/^https:\/\/script\.google\.com\/macros\//i.test(webhookUrl)) {
-    return false;
-  }
-  try {
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(6000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-const ADMISSION_SHEET_HEADERS = [
-  'ID',
-  'ট্র্যাকিং নম্বর (Tracking ID)',
-  'শিক্ষার্থীর নাম (Student Name)',
-  'পিতার নাম (Father Name)',
-  'জন্ম তারিখ (Date of Birth)',
-  'বিভাগ (Department)',
-  'জামাত / শ্রেণি (Class)',
-  'আবাসিক ধরন (Residential Type)',
-  'মোবাইল (Mobile)',
-  'ইমেইল (Email)',
-  'ঠিকানা (Address)',
-  'অবস্থা (Status)',
-  'জমার সময় (Submitted At)',
-];
-
-const STUDENT_SHEET_HEADERS = [
-  'ID',
-  'নিবন্ধন ধরন (Account Type)',
-  'রোল / রেফারেন্স (Student Roll)',
-  'শিক্ষার্থীর নাম (Student Name)',
-  'পিতার নাম (Father Name)',
-  'মোবাইল (Mobile)',
-  'ইমেইল (Email)',
-  'পাসওয়ার্ড হ্যাশ (Password Hash)',
-  'বিভাগ (Department)',
-  'জামাত / শ্রেণি (Class)',
-  'অবস্থা (Status)',
-  'সর্বশেষ লগইন (Last Login)',
-  'নিবন্ধনের সময় (Registered At)',
-];
 
 function buildInitialAcademicData(studentRoll: string): {
   tuitionRecords: TuitionRecord[];
@@ -626,28 +570,8 @@ export function createExpressApp() {
             ...academicData,
           });
 
-          const sheetsAutoSaved = await pushToGoogleSheetsWebhook({
-            targetSheet: 'Sheet2',
-            headers: STUDENT_SHEET_HEADERS,
-            row: [
-              created.id,
-              'ছাত্র রেজিস্ট্রেশন',
-              created.studentRoll,
-              created.name,
-              created.fatherName ?? '',
-              created.phone,
-              created.email,
-              created.passwordHash ? `${created.passwordSalt}:${created.passwordHash}` : '',
-              created.department,
-              created.className,
-              'active',
-              new Date().toISOString(),
-              created.createdAt,
-            ],
-          });
-
           const token = signToken(created.id);
-          res.status(201).json({ token, student: sanitizeStudent(created), sheetsAutoSaved });
+          res.status(201).json({ token, student: sanitizeStudent(created) });
           return;
         } catch {
           if (isSupabaseConfigured()) {
@@ -693,31 +617,10 @@ export function createExpressApp() {
       db.students.push(newRecord);
       writeDatabase(db);
 
-      const sheetsAutoSaved = await pushToGoogleSheetsWebhook({
-        targetSheet: 'Sheet2',
-        headers: STUDENT_SHEET_HEADERS,
-        row: [
-          newRecord.id,
-          'ছাত্র রেজিস্ট্রেশন',
-          newRecord.studentRoll,
-          newRecord.name,
-          newRecord.fatherName ?? '',
-          newRecord.phone,
-          newRecord.email,
-          `${newRecord.passwordSalt}:${newRecord.passwordHash}`,
-          newRecord.department,
-          newRecord.className,
-          'active',
-          newRecord.lastLoginAt ?? newRecord.createdAt,
-          newRecord.createdAt,
-        ],
-      });
-
       const token = signToken(newRecord.id);
       res.status(201).json({
         token,
         student: sanitizeStudent(newRecord),
-        sheetsAutoSaved,
       });
     } catch (error) {
       console.error('Error in POST /api/auth/register:', error);
@@ -825,29 +728,8 @@ export function createExpressApp() {
               ...academicData,
             });
           }
-          const sheetsAutoSaved = isNewStudent
-            ? await pushToGoogleSheetsWebhook({
-                targetSheet: 'Sheet2',
-                headers: STUDENT_SHEET_HEADERS,
-                row: [
-                  student.id,
-                  'Google লগইন',
-                  student.studentRoll,
-                  student.name,
-                  student.fatherName ?? '',
-                  student.phone,
-                  student.email,
-                  '',
-                  student.department,
-                  student.className,
-                  'active',
-                  new Date().toISOString(),
-                  student.createdAt,
-                ],
-              })
-            : false;
           const token = signToken(student.id);
-          res.json({ token, student: sanitizeStudent(student), isNewStudent, sheetsAutoSaved });
+          res.json({ token, student: sanitizeStudent(student), isNewStudent });
           return;
         } catch {
           if (isSupabaseConfigured()) {
@@ -889,30 +771,8 @@ export function createExpressApp() {
       }
       writeDatabase(db);
 
-      const sheetsAutoSaved = isNewStudent
-        ? await pushToGoogleSheetsWebhook({
-            targetSheet: 'Sheet2',
-            headers: STUDENT_SHEET_HEADERS,
-            row: [
-              matched.id,
-              'Google লগইন',
-              matched.studentRoll,
-              matched.name,
-              matched.fatherName ?? '',
-              matched.phone,
-              matched.email,
-              '',
-              matched.department,
-              matched.className,
-              'active',
-              matched.lastLoginAt ?? matched.createdAt,
-              matched.createdAt,
-            ],
-          })
-        : false;
-
       const token = signToken(matched.id);
-      res.json({ token, student: sanitizeStudent(matched), isNewStudent, sheetsAutoSaved });
+      res.json({ token, student: sanitizeStudent(matched), isNewStudent });
     } catch (error) {
       console.error('Error in POST /api/auth/firebase:', error);
       res.status(500).json({ error: 'Google লগইন তথ্য সংরক্ষণ করা যায়নি।' });
@@ -931,71 +791,6 @@ export function createExpressApp() {
     } catch (error) {
       console.error('Error in GET /api/users:', error);
       res.status(500).json({ error: 'Failed to retrieve user records.' });
-    }
-  });
-
-  // 2d. Authenticated Unified Records Export (for Google Sheets Sync)
-  app.get('/api/records/export', requireAuth, async (_req: AuthRequest, res: Response) => {
-    try {
-      if (isDatabaseConfigured()) {
-        try {
-          const records = await listUnifiedMadrasaRecords();
-          res.json({ records });
-          return;
-        } catch {
-          if (isSupabaseConfigured()) {
-            markSupabaseUnavailable();
-          }
-        }
-      }
-
-      const admDb = readAdmissionsDatabase();
-      const stuDb = readDatabase();
-      let seq = 1;
-      const admRows: UnifiedMadrasaRecord[] = admDb.admissions.map((a) => ({
-        id: seq++,
-        recordType: 'online_admission',
-        referenceCode: a.trackingId,
-        name: a.studentName,
-        fatherName: a.fatherName,
-        mobile: a.mobile,
-        email: a.email ?? '',
-        passwordHash: '',
-        dateOfBirth: a.dateOfBirth,
-        department: a.department,
-        className: a.className,
-        residentialType: a.residentialType,
-        address: a.address,
-        status: a.status,
-        firebaseUid: '',
-        lastLoginAt: null,
-        createdAt: a.submittedAtIso,
-        updatedAt: a.submittedAtIso,
-      }));
-      const stuRows: UnifiedMadrasaRecord[] = stuDb.students.map((s) => ({
-        id: seq++,
-        recordType: s.firebaseUid ? 'google_signin' : 'student_account',
-        referenceCode: s.studentRoll,
-        name: s.name,
-        fatherName: s.fatherName ?? '',
-        mobile: s.phone,
-        email: s.email,
-        passwordHash: s.passwordHash ? `${s.passwordSalt}:${s.passwordHash}` : '',
-        dateOfBirth: '',
-        department: s.department,
-        className: s.className,
-        residentialType: '',
-        address: '',
-        status: 'active',
-        firebaseUid: s.firebaseUid ?? '',
-        lastLoginAt: s.lastLoginAt ?? null,
-        createdAt: s.createdAt,
-        updatedAt: s.lastLoginAt ?? s.createdAt,
-      }));
-      res.json({ records: [...admRows, ...stuRows] });
-    } catch (error) {
-      console.error('Error in GET /api/records/export:', error);
-      res.status(500).json({ error: 'ডাটাবেজের তথ্য সংগ্রহ করা যায়নি।' });
     }
   });
 
@@ -1198,26 +993,7 @@ export function createExpressApp() {
           };
 
           const saved = await insertAdmissionDb(record);
-          const sheetsAutoSaved = await pushToGoogleSheetsWebhook({
-            targetSheet: 'admissions',
-            headers: ADMISSION_SHEET_HEADERS,
-            row: [
-              saved.id,
-              saved.trackingId,
-              saved.studentName,
-              saved.fatherName,
-              saved.dateOfBirth,
-              saved.department,
-              saved.className,
-              saved.residentialType,
-              saved.mobile,
-              saved.email ?? '',
-              saved.address,
-              saved.status,
-              saved.submittedAtIso,
-            ],
-          });
-          res.status(201).json({ admission: saved, sheetsAutoSaved });
+          res.status(201).json({ admission: saved });
           return;
         } catch {
           if (isSupabaseConfigured()) {
@@ -1257,26 +1033,7 @@ export function createExpressApp() {
 
       db.admissions.unshift(record);
       writeAdmissionsDatabase(db);
-      const sheetsAutoSaved = await pushToGoogleSheetsWebhook({
-        targetSheet: 'admissions',
-        headers: ADMISSION_SHEET_HEADERS,
-        row: [
-          record.id,
-          record.trackingId,
-          record.studentName,
-          record.fatherName,
-          record.dateOfBirth,
-          record.department,
-          record.className,
-          record.residentialType,
-          record.mobile,
-          record.email ?? '',
-          record.address,
-          record.status,
-          record.submittedAtIso,
-        ],
-      });
-      res.status(201).json({ admission: record, sheetsAutoSaved });
+      res.status(201).json({ admission: record });
     } catch (error) {
       console.error('Error in POST /api/admissions:', error);
       res.status(500).json({ error: 'ভর্তি আবেদন সংরক্ষণ করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।' });

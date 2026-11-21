@@ -58,8 +58,12 @@ import {
 } from './data/madrasaTranslations';
 import type { StudentUser } from './data/studentPortalData';
 import { signOut } from 'firebase/auth';
-import { auth, getSheetsAccessToken, setInMemoryFirebaseToken } from './lib/firebase';
-import { getSavedSheetsConfig } from './lib/googleSheetsSync';
+import { auth, setInMemoryFirebaseToken } from './lib/firebase';
+import {
+  saveAdmissionToFirestore,
+  saveStudentToFirestore,
+  syncUserProfileToFirestore,
+} from './lib/firestoreRecords';
 import { NoticeModal } from './components/NoticeModal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { GalleryLightboxModal } from './components/GalleryModals';
@@ -67,11 +71,6 @@ import { TeacherProfileModal } from './components/TeacherProfileModal';
 import { StudentAuthModal, type StudentAuthSuccessMeta } from './components/StudentAuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdmissionFormModal } from './components/AdmissionFormModal';
-import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
-import {
-  DirectSheetSaveDialog,
-  type PendingDirectSheetEntry,
-} from './components/DirectSheetSaveDialog';
 import { LanguageToggle } from './components/LanguageToggle';
 
 type NoticeFilter = 'সকল' | NoticeCategory;
@@ -137,7 +136,6 @@ export default function App() {
   });
   const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [sheetsModalOpen, setSheetsModalOpen] = useState(false);
   const skipNextMeFetchRef = useRef(false);
 
   const selectedNotice = useMemo(
@@ -203,16 +201,15 @@ export default function App() {
 
     const isRegistration =
       meta?.action === 'register' || (meta?.action === 'google_signin' && meta?.isNewStudent);
-    if (
-      isRegistration &&
-      !meta?.sheetsAutoSaved &&
-      (getSavedSheetsConfig()?.spreadsheetId || getSheetsAccessToken())
-    ) {
-      setPendingSheetEntry({
-        kind: 'student',
+
+    if (auth.currentUser) {
+      void syncUserProfileToFirestore(auth.currentUser).catch(() => {});
+    }
+    if (isRegistration) {
+      void saveStudentToFirestore(
         student,
-        accountType: meta?.action === 'google_signin' ? 'google_signin' : 'register',
-      });
+        meta?.action === 'google_signin' ? 'google_signin' : 'student_account',
+      ).catch(() => {});
     }
   };
 
@@ -245,11 +242,6 @@ export default function App() {
   const [submittingInline, setSubmittingInline] = useState(false);
   const [latestSubmission, setLatestSubmission] = useState<AdmissionSubmission | null>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
-  const [receiptSheetSavedInfo, setReceiptSheetSavedInfo] = useState<{
-    tabName: string;
-    sheetUrl?: string;
-  } | null>(null);
-  const [pendingSheetEntry, setPendingSheetEntry] = useState<PendingDirectSheetEntry | null>(null);
 
   const selectedInlineDept = useMemo(
     () => activeDepartments.find((d) => d.id === departmentId) ?? activeDepartments[0],
@@ -267,9 +259,7 @@ export default function App() {
     lightboxIndex !== null ||
     Boolean(selectedTeacherId) ||
     authModalOpen ||
-    admissionModalOpen ||
-    sheetsModalOpen ||
-    Boolean(pendingSheetEntry);
+    admissionModalOpen;
 
   useEffect(() => {
     if (!isAnyModalOpen) return;
@@ -401,8 +391,6 @@ export default function App() {
     };
 
     setSubmittingInline(true);
-    setReceiptSheetSavedInfo(null);
-    let sheetsAutoSaved = false;
     try {
       const response = await fetch('/api/admissions', {
         method: 'POST',
@@ -412,12 +400,10 @@ export default function App() {
       if (response.ok) {
         const data = (await response.json()) as {
           admission?: AdmissionSubmission;
-          sheetsAutoSaved?: boolean;
         };
         if (data.admission?.trackingId) {
           submission.trackingId = data.admission.trackingId;
         }
-        sheetsAutoSaved = Boolean(data.sheetsAutoSaved);
       }
     } catch {
       // Keep client receipt resilient if network is temporarily unreachable
@@ -425,21 +411,14 @@ export default function App() {
       setSubmittingInline(false);
     }
 
+    void saveAdmissionToFirestore(submission).catch(() => {});
+
     setLatestSubmission(submission);
     setReceiptModalOpen(true);
-
-    if (sheetsAutoSaved) {
-      setReceiptSheetSavedInfo({
-        tabName: lang === 'en' ? 'Admissions' : 'ভর্তি আবেদন',
-      });
-    } else if (getSavedSheetsConfig()?.spreadsheetId || getSheetsAccessToken()) {
-      setPendingSheetEntry({ kind: 'admission', submission });
-    }
   };
 
   const handleResetForNewApplication = () => {
     setReceiptModalOpen(false);
-    setReceiptSheetSavedInfo(null);
     setStudentName('');
     setFatherName('');
     setDateOfBirth('');
@@ -454,20 +433,13 @@ export default function App() {
 
   if (showDashboard && studentToken) {
     return (
-      <>
-        <StudentDashboard
-          token={studentToken}
-          lang={lang}
-          onChangeLang={setLang}
-          onBackToSite={() => setShowDashboard(false)}
-          onLogout={handleStudentLogout}
-        />
-        <DirectSheetSaveDialog
-          entry={pendingSheetEntry}
-          lang={lang}
-          onClose={() => setPendingSheetEntry(null)}
-        />
-      </>
+      <StudentDashboard
+        token={studentToken}
+        lang={lang}
+        onChangeLang={setLang}
+        onBackToSite={() => setShowDashboard(false)}
+        onLogout={handleStudentLogout}
+      />
     );
   }
 
@@ -1844,19 +1816,7 @@ export default function App() {
 
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-[#E2E8F0] pt-6 text-xs text-[#475569] sm:flex-row">
             <p>{copy.footerCopyright}</p>
-            <div className="flex flex-wrap items-center gap-4">
-              <p>{copy.footerMotto}</p>
-              <span aria-hidden="true" className="text-slate-300">
-                ·
-              </span>
-              <button
-                type="button"
-                onClick={() => setSheetsModalOpen(true)}
-                className="font-medium text-[#065F46] underline-offset-4 hover:underline"
-              >
-                {lang === 'en' ? 'Sync to Google Sheets' : 'Google Sheet-এ ডাটা যুক্ত করুন'}
-              </button>
-            </div>
+            <p>{copy.footerMotto}</p>
           </div>
         </div>
       </footer>
@@ -1871,12 +1831,6 @@ export default function App() {
       <ReceiptModal
         submission={receiptModalOpen ? latestSubmission : null}
         lang={lang}
-        sheetsSavedInfo={receiptSheetSavedInfo}
-        onRequestSaveToSheets={
-          latestSubmission
-            ? () => setPendingSheetEntry({ kind: 'admission', submission: latestSubmission })
-            : undefined
-        }
         onClose={() => setReceiptModalOpen(false)}
         onNewApplication={handleResetForNewApplication}
       />
@@ -1907,37 +1861,11 @@ export default function App() {
         initialDepartmentId={admissionInitialDeptId}
         lang={lang}
         onClose={() => setAdmissionModalOpen(false)}
-        onSubmitted={(submission, sheetsAutoSaved) => {
+        onSubmitted={(submission) => {
+          void saveAdmissionToFirestore(submission).catch(() => {});
           setLatestSubmission(submission);
           setAdmissionModalOpen(false);
           setReceiptModalOpen(true);
-          if (sheetsAutoSaved) {
-            setReceiptSheetSavedInfo({
-              tabName: lang === 'en' ? 'Admissions' : 'ভর্তি আবেদন',
-            });
-          } else {
-            setReceiptSheetSavedInfo(null);
-            if (getSavedSheetsConfig()?.spreadsheetId || getSheetsAccessToken()) {
-              setPendingSheetEntry({ kind: 'admission', submission });
-            }
-          }
-        }}
-      />
-
-      <GoogleSheetsSyncModal
-        isOpen={sheetsModalOpen}
-        lang={lang}
-        onClose={() => setSheetsModalOpen(false)}
-      />
-
-      <DirectSheetSaveDialog
-        entry={pendingSheetEntry}
-        lang={lang}
-        onClose={() => setPendingSheetEntry(null)}
-        onSaved={(info) => {
-          if (pendingSheetEntry?.kind === 'admission') {
-            setReceiptSheetSavedInfo(info);
-          }
         }}
       />
     </div>
